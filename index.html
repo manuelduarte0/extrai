@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extrator de Números de Imagem</title>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { text-align: center; margin-bottom: 20px; color: #0f3460; }
+        
+        #upload-area {
+            background: #16213e;
+            border: 3px dashed #0f3460;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        #upload-area:hover {
+            background: #0f3460;
+            border-color: #e94560;
+        }
+        #upload-area.dragover {
+            background: #e94560;
+            border-color: #fff;
+        }
+        #file-input { display: none; }
+        #preview {
+            max-width: 100%;
+            max-height: 400px;
+            margin: 20px auto;
+            display: none;
+            border-radius: 8px;
+            border: 2px solid #0f3460;
+        }
+        
+        button {
+            width: 100%;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px 0;
+            transition: all 0.2s;
+        }
+        #btnExtrair {
+            background: #e94560;
+            display: none;
+        }
+        #btnExtrair:hover { background: #c73e54; }
+        #btnExtrair:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        #btnCopiar {
+            background: #0f3460;
+            display: none;
+        }
+        #btnCopiar:hover { background: #16213e; }
+        
+        #status {
+            text-align: center;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+        }
+        #status.carregando {
+            background: #f39c12;
+            color: #000;
+            display: block;
+        }
+        #status.sucesso {
+            background: #27ae60;
+            display: block;
+        }
+        #status.erro {
+            background: #e74c3c;
+            display: block;
+        }
+        
+        #resultado {
+            background: #16213e;
+            border: 2px solid #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 150px;
+            font-size: 16px;
+            line-height: 1.8;
+            word-break: break-all;
+            white-space: pre-wrap;
+            display: none;
+        }
+        
+       .info {
+            background: #0f3460;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 14px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>📸 Extrair Números de Imagem</h1>
+    
+    <div class="info">
+        Tira print ou faz upload da imagem com os números. Vou extrair só os dígitos.
+    </div>
+    
+    <div id="upload-area" onclick="document.getElementById('file-input').click()">
+        <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
+        <div style="font-size: 18px; font-weight: bold;">Clique ou arraste a imagem aqui</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">PNG, JPG, JPEG</div>
+    </div>
+    
+    <input type="file" id="file-input" accept="image/*">
+    <img id="preview">
+    
+    <button id="btnExtrair" onclick="extrairNumeros()">🔍 Extrair Números</button>
+    
+    <div id="status"></div>
+    
+    <div id="resultado"></div>
+    <button id="btnCopiar" onclick="copiar()">📋 Copiar Números</button>
+
+    <script>
+        let imagemCarregada = null;
+        let numerosExtraidos = '';
+        
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const preview = document.getElementById('preview');
+        const btnExtrair = document.getElementById('btnExtrair');
+        const status = document.getElementById('status');
+        const resultado = document.getElementById('resultado');
+        const btnCopiar = document.getElementById('btnCopiar');
+        
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                carregarImagem(file);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) carregarImagem(file);
+        });
+        
+        function carregarImagem(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagemCarregada = e.target.result;
+                preview.src = imagemCarregada;
+                preview.style.display = 'block';
+                btnExtrair.style.display = 'block';
+                resultado.style.display = 'none';
+                btnCopiar.style.display = 'none';
+                status.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        async function extrairNumeros() {
+            if (!imagemCarregada) return;
+            
+            btnExtrair.disabled = true;
+            btnExtrair.innerText = '⏳ Processando...';
+            status.className = 'carregando';
+            status.innerText = 'Lendo a imagem... Isso pode demorar 5-15 segundos';
+            resultado.style.display = 'none';
+            btnCopiar.style.display = 'none';
+            
+            try {
+                const { data: { text } } = await Tesseract.recognize(
+                    imagemCarregada,
+                    'por',
+                    {
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                status.innerText = `Lendo... ${Math.round(m.progress * 100)}%`;
+                            }
+                        }
+                    }
+                );
+                
+                // Extrai só números
+                const numeros = text.match(/\d+/g);
+                
+                if (!numeros || numeros.length === 0) {
+                    status.className = 'erro';
+                    status.innerText = '❌ Nenhum número encontrado na imagem';
+                    btnExtrair.disabled = false;
+                    btnExtrair.innerText = '🔍 Extrair Números';
+                    return;
+                }
+                
+                numerosExtraidos = numeros.join(', ');
+                resultado.innerText = numerosExtraidos;
+                resultado.style.display = 'block';
+                btnCopiar.style.display = 'block';
+                
+                status.className = 'sucesso';
+                status.innerText = `✅ ${numeros.length} números encontrados!`;
+                
+            } catch (error) {
+                status.className = 'erro';
+                status.innerText = '❌ Erro ao processar imagem. Tenta uma foto mais nítida.';
+                console.error(error);
+            }
+            
+            btnExtrair.disabled = false;
+            btnExtrair.innerText = '🔍 Extrair Números';
+        }
+        
+        function copiar() {
+            navigator.clipboard.writeText(numerosExtraidos);
+            btnCopiar.innerText = '✅ Copiado!';
+            setTimeout(() => {
+                btnCopiar.innerText = '📋 Copiar Números';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
