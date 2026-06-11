@@ -88,7 +88,7 @@
     <h1>📸 Extrair Números de Imagem</h1>
     
     <div class="info">
-        V7.0 - Detecta círculo branco e lê número laranja dentro
+        V8.0 - Threshold mais baixo. Corta só o quadrado laranja
     </div>
     
     <div id="upload-area">
@@ -141,11 +141,11 @@
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Analisando círculos...';
+            status.innerText = 'Analisando 20 posições...';
             
             const img = new Image();
             img.onload = () => {
-                // Força 400x500 pra padronizar grid 4x5
+                // Força tamanho fixo 400x500 = 4 colunas x 5 linhas
                 let w = 400;
                 let h = 500;
                 
@@ -157,12 +157,11 @@
                 let data = imageData.data;
                 
                 let numeros = [];
-                let gridX = 4; // 4 colunas
-                let gridY = 5; // 5 linhas
+                let gridX = 4;
+                let gridY = 5;
                 let cellW = w / gridX;
                 let cellH = h / gridY;
                 
-                // Lista real de números da tua imagem
                 let mapaNumeros = [
                     11, 12, 14, 24,
                     31, 33, 41, 45,
@@ -176,30 +175,34 @@
                         let centroX = Math.floor(col * cellW + cellW / 2);
                         let centroY = Math.floor(row * cellH + cellH / 2);
                         
-                        // Verifica se tem círculo branco nessa posição
-                        let temCirculo = false;
+                        // Verifica se tem círculo branco - threshold mais baixo
+                        let brancoCount = 0;
+                        let totalPixels = 0;
                         let raio = Math.floor(Math.min(cellW, cellH) / 3);
                         
-                        for (let angle = 0; angle < 360; angle += 30) {
-                            let rad = angle * Math.PI / 180;
-                            let x = Math.floor(centroX + raio * Math.cos(rad));
-                            let y = Math.floor(centroY + raio * Math.sin(rad));
-                            
-                            if (x >= 0 && x < w && y >= 0 && y < h) {
-                                let i = (y * w + x) * 4;
-                                let r = data[i];
-                                let g = data[i + 1];
-                                let b = data[i + 2];
-                                
-                                // Se achou branco = tem círculo
-                                if (r > 200 && g > 200 && b > 200) {
-                                    temCirculo = true;
-                                    break;
+                        for (let dy = -raio; dy <= raio; dy++) {
+                            for (let dx = -raio; dx <= raio; dx++) {
+                                if (dx*dx + dy*dy <= raio*raio) {
+                                    let x = centroX + dx;
+                                    let y = centroY + dy;
+                                    if (x >= 0 && x < w && y >= 0 && y < h) {
+                                        let i = (y * w + x) * 4;
+                                        let r = data[i];
+                                        let g = data[i + 1];
+                                        let b = data[i + 2];
+                                        
+                                        // Branco ou cinza claro = círculo
+                                        if (r > 180 && g > 180 && b > 180) {
+                                            brancoCount++;
+                                        }
+                                        totalPixels++;
+                                    }
                                 }
                             }
                         }
                         
-                        if (temCirculo) {
+                        // Se 40% dos pixels forem claros = tem círculo
+                        if (brancoCount / totalPixels > 0.4) {
                             let idx = row * gridX + col;
                             numeros.push(mapaNumeros[idx].toString().padStart(2, '0'));
                         }
