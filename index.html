@@ -4,21 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extrator de Números</title>
+    <script src='https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: Arial, sans-serif;
-            background: #1a1a2e;
+            background: #0a0a0a;
             color: #fff;
             padding: 20px;
             max-width: 800px;
             margin: 0 auto;
         }
-        h1 { text-align: center; margin-bottom: 20px; color: #e94560; }
+        h1 { text-align: center; margin-bottom: 20px; color: #ff0000; }
         
         #upload-area {
-            background: #16213e;
-            border: 3px dashed #0f3460;
+            background: #1a1a1a;
+            border: 3px dashed #ff0000;
             border-radius: 12px;
             padding: 40px;
             text-align: center;
@@ -32,9 +33,16 @@
             margin: 20px auto;
             display: none;
             border-radius: 8px;
-            border: 2px solid #0f3460;
+            border: 2px solid #ff0000;
         }
         #canvas { display: none; }
+        #canvasProcessada {
+            max-width: 100%;
+            margin: 20px auto;
+            display: none;
+            border-radius: 8px;
+            border: 2px solid #00ff00;
+        }
         
         button {
             width: 100%;
@@ -47,8 +55,9 @@
             cursor: pointer;
             margin: 10px 0;
         }
-        #btnExtrair { background: #e94560; display: none; }
-        #btnCopiar { background: #0f3460; display: none; }
+        #btnProcessar { background: #ff8800; display: none; }
+        #btnExtrair { background: #ff0000; display: none; }
+        #btnCopiar { background: #00aa00; display: none; }
         
         #status {
             text-align: center;
@@ -63,8 +72,8 @@
         #status.info { background: #f39c12; color: #000; display: block; }
         
         #resultado {
-            background: #16213e;
-            border: 2px solid #0f3460;
+            background: #1a1a1a;
+            border: 2px solid #ff0000;
             border-radius: 8px;
             padding: 15px;
             min-height: 100px;
@@ -75,33 +84,36 @@
         }
         
 .info {
-            background: #0f3460;
+            background: #1a1a1a;
             padding: 12px;
             border-radius: 8px;
             margin: 15px 0;
             font-size: 14px;
             text-align: center;
+            border: 1px solid #ff0000;
         }
     </style>
 </head>
 <body>
-    <h1>📸 Extrair Números de Imagem</h1>
+    <h1>🔴 Extrator Padrão Preto/Vermelho</h1>
     
     <div class="info">
-        V8.0 - Threshold mais baixo. Corta só o quadrado laranja
+        V9.0 - Converte pra fundo PRETO, bolinha BRANCA, número VERMELHO. OCR real.
     </div>
     
     <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
-        <div style="font-size: 18px; font-weight: bold;">Clique aqui pra enviar a imagem</div>
+        <div style="font-size: 18px; font-weight: bold;">Envia o print do quadrado laranja</div>
         <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Corta só o quadrado laranja</div>
     </div>
     
     <input type="file" id="file-input" accept="image/*">
     <img id="preview">
     <canvas id="canvas"></canvas>
+    <canvas id="canvasProcessada"></canvas>
     
-    <button id="btnExtrair">🔍 Extrair Números</button>
+    <button id="btnProcessar">1️⃣ Processar Imagem</button>
+    <button id="btnExtrair">2️⃣ Extrair Números</button>
     
     <div id="status"></div>
     
@@ -114,12 +126,34 @@
         const preview = document.getElementById('preview');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
+        const canvasProcessada = document.getElementById('canvasProcessada');
+        const ctxProc = canvasProcessada.getContext('2d');
+        const btnProcessar = document.getElementById('btnProcessar');
         const btnExtrair = document.getElementById('btnExtrair');
         const status = document.getElementById('status');
         const resultado = document.getElementById('resultado');
         const btnCopiar = document.getElementById('btnCopiar');
         
         let numerosExtraidos = '';
+        let worker = null;
+        
+        // Inicia Tesseract
+        async function initOCR() {
+            status.className = 'info';
+            status.innerText = 'Carregando OCR...';
+            try {
+                worker = await Tesseract.createWorker('eng');
+                await worker.setParameters({
+                    tessedit_char_whitelist: '0123456789',
+                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK
+                });
+                status.style.display = 'none';
+            } catch (e) {
+                status.className = 'erro';
+                status.innerText = '❌ Erro ao carregar OCR';
+            }
+        }
+        initOCR();
         
         uploadArea.addEventListener('click', () => fileInput.click());
         
@@ -131,7 +165,9 @@
             reader.onload = (e) => {
                 preview.src = e.target.result;
                 preview.style.display = 'block';
-                btnExtrair.style.display = 'block';
+                btnProcessar.style.display = 'block';
+                btnExtrair.style.display = 'none';
+                canvasProcessada.style.display = 'none';
                 resultado.style.display = 'none';
                 btnCopiar.style.display = 'none';
                 status.style.display = 'none';
@@ -139,13 +175,14 @@
             reader.readAsDataURL(file);
         });
         
-        btnExtrair.addEventListener('click', () => {
+        // PASSO 1: Processa imagem pra padrão preto/branco/vermelho
+        btnProcessar.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Analisando 20 posições...';
+            status.innerText = 'Convertendo pra padrão preto/vermelho...';
             
             const img = new Image();
             img.onload = () => {
-                // Força tamanho fixo 400x500 = 4 colunas x 5 linhas
+                // Tamanho fixo 400x500
                 let w = 400;
                 let h = 500;
                 
@@ -153,77 +190,97 @@
                 canvas.height = h;
                 ctx.drawImage(img, 0, 0, w, h);
                 
+                canvasProcessada.width = w;
+                canvasProcessada.height = h;
+                
                 let imageData = ctx.getImageData(0, 0, w, h);
                 let data = imageData.data;
+                let outputData = ctxProc.createImageData(w, h);
+                let out = outputData.data;
                 
-                let numeros = [];
-                let gridX = 4;
-                let gridY = 5;
-                let cellW = w / gridX;
-                let cellH = h / gridY;
-                
-                let mapaNumeros = [
-                    11, 12, 14, 24,
-                    31, 33, 41, 45,
-                    62, 63, 68, 69,
-                    71, 72, 75, 77,
-                    89, 92, 98, 0
-                ];
-                
-                for (let row = 0; row < gridY; row++) {
-                    for (let col = 0; col < gridX; col++) {
-                        let centroX = Math.floor(col * cellW + cellW / 2);
-                        let centroY = Math.floor(row * cellH + cellH / 2);
-                        
-                        // Verifica se tem círculo branco - threshold mais baixo
-                        let brancoCount = 0;
-                        let totalPixels = 0;
-                        let raio = Math.floor(Math.min(cellW, cellH) / 3);
-                        
-                        for (let dy = -raio; dy <= raio; dy++) {
-                            for (let dx = -raio; dx <= raio; dx++) {
-                                if (dx*dx + dy*dy <= raio*raio) {
-                                    let x = centroX + dx;
-                                    let y = centroY + dy;
-                                    if (x >= 0 && x < w && y >= 0 && y < h) {
-                                        let i = (y * w + x) * 4;
-                                        let r = data[i];
-                                        let g = data[i + 1];
-                                        let b = data[i + 2];
-                                        
-                                        // Branco ou cinza claro = círculo
-                                        if (r > 180 && g > 180 && b > 180) {
-                                            brancoCount++;
-                                        }
-                                        totalPixels++;
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Se 40% dos pixels forem claros = tem círculo
-                        if (brancoCount / totalPixels > 0.4) {
-                            let idx = row * gridX + col;
-                            numeros.push(mapaNumeros[idx].toString().padStart(2, '0'));
-                        }
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i];
+                    let g = data[i + 1];
+                    let b = data[i + 2];
+                    
+                    // Detecta laranja do número: R alto, G médio, B baixo
+                    let ehLaranja = r > 180 && g > 80 && g < 200 && b < 120;
+                    
+                    // Detecta branco do círculo: tudo alto
+                    let ehBranco = r > 200 && g > 200 && b > 200;
+                    
+                    if (ehLaranja) {
+                        // Número laranja vira VERMELHO PURO
+                        out[i] = 255; // R
+                        out[i + 1] = 0; // G
+                        out[i + 2] = 0; // B
+                        out[i + 3] = 255; // A
+                    } else if (ehBranco) {
+                        // Círculo branco fica BRANCO PURO
+                        out[i] = 255;
+                        out[i + 1] = 255;
+                        out[i + 2] = 255;
+                        out[i + 3] = 255;
+                    } else {
+                        // Fundo laranja vira PRETO PURO
+                        out[i] = 0;
+                        out[i + 1] = 0;
+                        out[i + 2] = 0;
+                        out[i + 3] = 255;
                     }
                 }
                 
-                if (numeros.length === 0) {
+                ctxProc.putImageData(outputData, 0, 0);
+                canvasProcessada.style.display = 'block';
+                btnExtrair.style.display = 'block';
+                
+                status.className = 'sucesso';
+                status.innerText = '✅ Imagem processada! Agora clica em Extrair';
+            };
+            img.src = preview.src;
+        });
+        
+        // PASSO 2: Extrai números vermelhos com OCR
+        btnExtrair.addEventListener('click', async () => {
+            if (!worker) {
+                status.className = 'erro';
+                status.innerText = '❌ OCR não carregou. Recarrega a página.';
+                return;
+            }
+            
+            status.className = 'info';
+            status.innerText = 'Lendo números vermelhos...';
+            
+            try {
+                const { data: { text } } = await worker.recognize(canvasProcessada);
+                
+                // Pega todos números de 1 ou 2 dígitos
+                const numeros = text.match(/\d{1,2}/g);
+                
+                if (!numeros || numeros.length === 0) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não detectei círculos. Corta só o quadrado laranja sem borda.';
+                    status.innerText = '❌ Não achei números. Tenta cortar melhor a imagem.';
                     return;
                 }
                 
-                numerosExtraidos = numeros.join(', ');
+                // Remove duplicatas, formata 00-99, ordena
+                let numerosUnicos = [...new Set(numeros)]
+                   .map(n => n.padStart(2, '0'))
+                   .filter(n => parseInt(n) >= 0 && parseInt(n) <= 99)
+                   .sort((a,b) => parseInt(a) - parseInt(b));
+                
+                numerosExtraidos = numerosUnicos.join(', ');
                 resultado.innerText = numerosExtraidos;
                 resultado.style.display = 'block';
                 btnCopiar.style.display = 'block';
                 
                 status.className = 'sucesso';
-                status.innerText = `✅ ${numeros.length} números encontrados!`;
-            };
-            img.src = preview.src;
+                status.innerText = `✅ ${numerosUnicos.length} números encontrados!`;
+                
+            } catch (error) {
+                status.className = 'erro';
+                status.innerText = '❌ Erro no OCR: ' + error.message;
+            }
         });
         
         btnCopiar.addEventListener('click', () => {
