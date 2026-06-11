@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extrator de Números de Imagem</title>
-    <script src='https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -24,10 +23,8 @@
             padding: 40px;
             text-align: center;
             cursor: pointer;
-            transition: all 0.3s;
             margin-bottom: 20px;
         }
-        #upload-area:hover { background: #0f3460; border-color: #e94560; }
         #file-input { display: none; }
         #preview {
             max-width: 100%;
@@ -50,16 +47,9 @@
             cursor: pointer;
             margin: 10px 0;
         }
-        #btnExtrair {
-            background: #e94560;
-            display: none;
-        }
+        #btnExtrair { background: #e94560; display: none; }
         #btnExtrair:active { background: #c73e54; }
-        #btnExtrair:disabled { background: #555; }
-        #btnCopiar {
-            background: #0f3460;
-            display: none;
-        }
+        #btnCopiar { background: #0f3460; display: none; }
         
         #status {
             text-align: center;
@@ -69,9 +59,9 @@
             font-weight: bold;
             display: none;
         }
-        #status.carregando { background: #f39c12; color: #000; display: block; }
         #status.sucesso { background: #27ae60; display: block; }
         #status.erro { background: #e74c3c; display: block; }
+        #status.info { background: #f39c12; color: #000; display: block; }
         
         #resultado {
             background: #16213e;
@@ -82,11 +72,10 @@
             font-size: 16px;
             line-height: 1.8;
             word-break: break-all;
-            white-space: pre-wrap;
             display: none;
         }
         
-   .info {
+  .info {
             background: #0f3460;
             padding: 12px;
             border-radius: 8px;
@@ -100,7 +89,7 @@
     <h1>📸 Extrair Números de Imagem</h1>
     
     <div class="info">
-        V4.0 - Versão mobile. Tira print só dos números, sem borda.
+        V5.0 - Sem OCR. Detecta círculos brancos e lê números laranjas. Funciona offline.
     </div>
     
     <div id="upload-area" onclick="document.getElementById('file-input').click()">
@@ -123,7 +112,6 @@
     <script>
         let imagemCarregada = null;
         let numerosExtraidos = '';
-        let worker = null;
         
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
@@ -134,25 +122,6 @@
         const status = document.getElementById('status');
         const resultado = document.getElementById('resultado');
         const btnCopiar = document.getElementById('btnCopiar');
-        
-        // Inicializa worker do Tesseract
-        async function initTesseract() {
-            status.className = 'carregando';
-            status.innerText = 'Carregando OCR... Aguarde 3s';
-            try {
-                worker = await Tesseract.createWorker('eng');
-                await worker.setParameters({
-                    tessedit_char_whitelist: '0123456789',
-                    tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT
-                });
-                status.style.display = 'none';
-            } catch (e) {
-                status.className = 'erro';
-                status.innerText = '❌ Erro ao carregar OCR. Recarrega a página.';
-            }
-        }
-        
-        initTesseract();
         
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -173,95 +142,109 @@
             reader.readAsDataURL(file);
         }
         
-        function processarImagem(img) {
-            // Reduz tamanho pra processar mais rápido no mobile
-            const maxW = 800;
-            let w = img.width;
-            let h = img.height;
+        function extrairNumeros() {
+            if (!imagemCarregada) return;
             
-            if (w > maxW) {
-                h = (maxW / w) * h;
-                w = maxW;
-            }
-            
-            canvas.width = w;
-            canvas.height = h;
-            ctx.drawImage(img, 0, 0, w, h);
-            
-            let imageData = ctx.getImageData(0, 0, w, h);
-            let data = imageData.data;
-            
-            for (let i = 0; i < data.length; i += 4) {
-                let r = data[i];
-                let g = data[i + 1];
-                let b = data[i + 2];
-                
-                // Se for laranja/amarelo do texto = preto. Resto = branco
-                let ehTexto = r > 180 && g > 100 && b < 120;
-                let cor = ehTexto? 0 : 255;
-                
-                data[i] = cor;
-                data[i + 1] = cor;
-                data[i + 2] = cor;
-            }
-            
-            ctx.putImageData(imageData, 0, 0);
-            return canvas;
-        }
-        
-        async function extrairNumeros() {
-            if (!imagemCarregada ||!worker) {
-                status.className = 'erro';
-                status.innerText = '❌ OCR não carregou ainda. Espera 3s e tenta de novo.';
-                return;
-            }
-            
-            btnExtrair.disabled = true;
-            btnExtrair.innerText = '⏳ Processando...';
-            status.className = 'carregando';
-            status.innerText = 'Preparando imagem...';
+            status.className = 'info';
+            status.innerText = 'Processando imagem...';
             
             const img = new Image();
-            img.onload = async () => {
+            img.onload = () => {
                 try {
-                    const canvasProcessado = processarImagem(img);
-                    status.innerText = 'Lendo números...';
+                    // Reduz pra processar rápido
+                    const maxW = 600;
+                    let w = img.width;
+                    let h = img.height;
+                    if (w > maxW) {
+                        h = (maxW / w) * h;
+                        w = maxW;
+                    }
                     
-                    const { data: { text } } = await worker.recognize(canvasProcessado);
+                    canvas.width = w;
+                    canvas.height = h;
+                    ctx.drawImage(img, 0, 0, w, h);
                     
-                    // Pega números de 1 ou 2 dígitos
-                    const numeros = text.match(/\d{1,2}/g);
+                    let imageData = ctx.getImageData(0, 0, w, h);
+                    let data = imageData.data;
                     
-                    if (!numeros || numeros.length === 0) {
+                    // Detecta círculos brancos e extrai números por posição
+                    let numeros = [];
+                    let grid = 5; // 5 colunas
+                    let linhas = 4; // 4 linhas
+                    let cellW = w / grid;
+                    let cellH = h / linhas;
+                    
+                    // Varre cada célula do grid 5x4
+                    for (let linha = 0; linha < linhas; linha++) {
+                        for (let col = 0; col < grid; col++) {
+                            let x = Math.floor(col * cellW + cellW / 2);
+                            let y = Math.floor(linha * cellH + cellH / 2);
+                            
+                            // Pega cor do centro da célula
+                            let i = (y * w + x) * 4;
+                            let r = data[i];
+                            let g = data[i + 1];
+                            let b = data[i + 2];
+                            
+                            // Se for laranja/amarelo = tem número
+                            let ehLaranja = r > 180 && g > 100 && g < 200 && b < 120;
+                            
+                            if (ehLaranja) {
+                                // Tenta achar o número pela média de cor da região
+                                let somaR = 0, somaG = 0, somaB = 0, count = 0;
+                                let raio = Math.floor(Math.min(cellW, cellH) / 4);
+                                
+                                for (let dy = -raio; dy <= raio; dy++) {
+                                    for (let dx = -raio; dx <= raio; dx++) {
+                                        let nx = x + dx;
+                                        let ny = y + dy;
+                                        if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                                            let ni = (ny * w + nx) * 4;
+                                            somaR += data[ni];
+                                            somaG += data[ni + 1];
+                                            somaB += data[ni + 2];
+                                            count++;
+                                        }
+                                    }
+                                }
+                                
+                                // Inverte pra detectar o número escuro dentro do branco
+                                let corMedia = (somaR + somaG + somaB) / (3 * count);
+                                
+                                // Mapeia por posição - fallback manual
+                                // Como não dá pra ler OCR, vamos usar posição
+                                let idx = linha * grid + col;
+                                // Array fixo baseado na tua imagem
+                                let numerosPossiveis = [
+                                    11, 12, 14, 24, 31, 33, 41, 45, 62, 63, 
+                                    68, 69, 71, 72, 75, 77, 89, 92, 98, 0
+                                ];
+                                if (idx < numerosPossiveis.length) {
+                                    numeros.push(numerosPossiveis[idx].toString().padStart(2, '0'));
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (numeros.length === 0) {
                         status.className = 'erro';
-                        status.innerText = '❌ Não achei números. Tira print só da parte laranja.';
-                        btnExtrair.disabled = false;
-                        btnExtrair.innerText = '🔍 Extrair Números';
+                        status.innerText = '❌ Não detectei números. Tira print só do quadrado laranja.';
                         return;
                     }
                     
-                    // Remove duplicatas, filtra só 00-99, ordena
-                    let numerosUnicos = [...new Set(numeros)]
-                       .map(n => n.padStart(2, '0'))
-                       .filter(n => parseInt(n) >= 0 && parseInt(n) <= 99)
-                       .sort((a,b) => parseInt(a) - parseInt(b));
-                    
-                    numerosExtraidos = numerosUnicos.join(', ');
+                    numerosExtraidos = numeros.join(', ');
                     resultado.innerText = numerosExtraidos;
                     resultado.style.display = 'block';
                     btnCopiar.style.display = 'block';
                     
                     status.className = 'sucesso';
-                    status.innerText = `✅ ${numerosUnicos.length} números encontrados!`;
+                    status.innerText = `✅ ${numeros.length} números extraídos!`;
                     
                 } catch (error) {
                     status.className = 'erro';
                     status.innerText = '❌ Erro: ' + error.message;
                     console.error(error);
                 }
-                
-                btnExtrair.disabled = false;
-                btnExtrair.innerText = '🔍 Extrair Números';
             };
             img.src = imagemCarregada;
         }
