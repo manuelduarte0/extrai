@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator Preto/Vermelho</title>
+    <title>Extrator Real</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator Preto/Vermelho</h1>
+    <h1>🔴 Extrator Real V11.0</h1>
     
     <div class="info">
-        V10.0 - SEM OCR. Converte pra PRETO/BRANCO/VERMELHO e detecta por posição. 100% offline.
+        V11.0 - Lê o número dentro de cada círculo. Sem mapa fixo. Funciona com qualquer jogo.
     </div>
     
     <div id="upload-area">
@@ -153,13 +153,57 @@
             reader.readAsDataURL(file);
         });
         
+        // Padrões de dígitos 0-9 em matriz 5x3
+        const DIGITOS = {
+            '111101101111': '0',
+            '010010010010': '1',
+            '111001111100111': '2',
+            '111001111001111': '3',
+            '101101111001001': '4',
+            '111100111001111': '5',
+            '111100111101111': '6',
+            '111001001001001': '7',
+            '111101111101111': '8',
+            '111101111001111': '9'
+        };
+        
+        function reconhecerDigito(imgData, x, y, w, h) {
+            // Reduz pra 5x3 e binariza
+            let matriz = '';
+            let stepY = h / 5;
+            let stepX = w / 3;
+            
+            for (let row = 0; row < 5; row++) {
+                for (let col = 0; col < 3; col++) {
+                    let soma = 0;
+                    let count = 0;
+                    for (let dy = 0; dy < stepY; dy++) {
+                        for (let dx = 0; dx < stepX; dx++) {
+                            let px = Math.floor(x + col * stepX + dx);
+                            let py = Math.floor(y + row * stepY + dy);
+                            if (px >= 0 && px < imgData.width && py >= 0 && py < imgData.height) {
+                                let i = (py * imgData.width + px) * 4;
+                                let r = imgData.data[i];
+                                let g = imgData.data[i + 1];
+                                let b = imgData.data[i + 2];
+                                // Se for laranja/vermelho
+                                if (r > 150 && g < 150 && b < 150) soma++;
+                                count++;
+                            }
+                        }
+                    }
+                    matriz += (soma / count > 0.3)? '1' : '0';
+                }
+            }
+            return DIGITOS[matriz] || '?';
+        }
+        
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Processando...';
+            status.innerText = 'Processando e lendo números...';
             
             const img = new Image();
             img.onload = () => {
-                // Força 400x500 = grid 4x5 perfeito
                 let w = 400;
                 let h = 500;
                 
@@ -181,15 +225,6 @@
                 let cellW = w / gridX;
                 let cellH = h / gridY;
                 
-                // Ordem exata dos números na tua imagem
-                let mapaNumeros = [
-                    11, 12, 14, 24,
-                    31, 33, 41, 45,
-                    62, 63, 68, 69,
-                    71, 72, 75, 77,
-                    89, 92, 98, 0
-                ];
-                
                 for (let row = 0; row < gridY; row++) {
                     for (let col = 0; col < gridX; col++) {
                         let startX = Math.floor(col * cellW);
@@ -197,11 +232,10 @@
                         let endX = Math.floor((col + 1) * cellW);
                         let endY = Math.floor((row + 1) * cellH);
                         
-                        let laranjaCount = 0;
-                        let brancoCount = 0;
-                        let totalPixels = 0;
+                        let temLaranja = false;
+                        let minX = endX, maxX = startX, minY = endY, maxY = startY;
                         
-                        // Analisa cada célula
+                        // 1. Pinta de preto/branco/vermelho e acha bounds do número
                         for (let y = startY; y < endY; y++) {
                             for (let x = startX; x < endX; x++) {
                                 let i = (y * w + x) * 4;
@@ -209,40 +243,44 @@
                                 let g = data[i + 1];
                                 let b = data[i + 2];
                                 
-                                // Número laranja: R alto, G médio, B baixo
+                                // Laranja do número
                                 if (r > 160 && g > 70 && g < 200 && b < 130) {
-                                    laranjaCount++;
-                                    // Pinta de VERMELHO PURO
-                                    out[i] = 255;
-                                    out[i + 1] = 0;
-                                    out[i + 2] = 0;
-                                    out[i + 3] = 255;
+                                    temLaranja = true;
+                                    out[i] = 255; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
+                                    minX = Math.min(minX, x);
+                                    maxX = Math.max(maxX, x);
+                                    minY = Math.min(minY, y);
+                                    maxY = Math.max(maxY, y);
                                 } 
-                                // Círculo branco
+                                // Branco
                                 else if (r > 180 && g > 180 && b > 180) {
-                                    brancoCount++;
-                                    // Pinta de BRANCO PURO
-                                    out[i] = 255;
-                                    out[i + 1] = 255;
-                                    out[i + 2] = 255;
-                                    out[i + 3] = 255;
+                                    out[i] = 255; out[i+1] = 255; out[i+2] = 255; out[i+3] = 255;
                                 } 
-                                // Fundo laranja
+                                // Fundo
                                 else {
-                                    // Pinta de PRETO PURO
-                                    out[i] = 0;
-                                    out[i + 1] = 0;
-                                    out[i + 2] = 0;
-                                    out[i + 3] = 255;
+                                    out[i] = 0; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
                                 }
-                                totalPixels++;
                             }
                         }
                         
-                        // Se tem mais de 2% de laranja na célula = tem número
-                        if (laranjaCount / totalPixels > 0.02) {
-                            let idx = row * gridX + col;
-                            numeros.push(mapaNumeros[idx].toString().padStart(2, '0'));
+                        // 2. Se achou laranja, lê os dígitos
+                        if (temLaranja) {
+                            let numW = maxX - minX;
+                            let numH = maxY - minY;
+                            
+                            // Se for 2 dígitos: divide no meio
+                            if (numW > numH * 0.6) {
+                                let d1 = reconhecerDigito(imageData, minX, minY, numW/2, numH);
+                                let d2 = reconhecerDigito(imageData, minX + numW/2, minY, numW/2, numH);
+                                if (d1!== '?' && d2!== '?') {
+                                    numeros.push(d1 + d2);
+                                }
+                            } else {
+                                let d = reconhecerDigito(imageData, minX, minY, numW, numH);
+                                if (d!== '?') {
+                                    numeros.push('0' + d);
+                                }
+                            }
                         }
                     }
                 }
@@ -252,7 +290,7 @@
                 
                 if (numeros.length === 0) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não detectei números. Corta só o quadrado laranja.';
+                    status.innerText = '❌ Não consegui ler os números. Corta melhor a imagem.';
                     return;
                 }
                 
@@ -262,7 +300,7 @@
                 btnCopiar.style.display = 'block';
                 
                 status.className = 'sucesso';
-                status.innerText = `✅ ${numeros.length} números extraídos!`;
+                status.innerText = `✅ ${numeros.length} números lidos!`;
             };
             img.src = preview.src;
         });
