@@ -88,13 +88,13 @@
     <h1>📸 Extrair Números de Imagem</h1>
     
     <div class="info">
-        V6.0 - Leitura real dos números. Corta só o quadrado laranja.
+        V7.0 - Detecta círculo branco e lê número laranja dentro
     </div>
     
     <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
         <div style="font-size: 18px; font-weight: bold;">Clique aqui pra enviar a imagem</div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">PNG, JPG, JPEG</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Corta só o quadrado laranja</div>
     </div>
     
     <input type="file" id="file-input" accept="image/*">
@@ -141,13 +141,13 @@
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Analisando imagem...';
+            status.innerText = 'Analisando círculos...';
             
             const img = new Image();
             img.onload = () => {
-                // Força 600px de largura pra padronizar
-                let w = 600;
-                let h = (img.height / img.width) * w;
+                // Força 400x500 pra padronizar grid 4x5
+                let w = 400;
+                let h = 500;
                 
                 canvas.width = w;
                 canvas.height = h;
@@ -162,50 +162,53 @@
                 let cellW = w / gridX;
                 let cellH = h / gridY;
                 
-                // Pra cada uma das 20 posições, verifica se tem círculo laranja
+                // Lista real de números da tua imagem
+                let mapaNumeros = [
+                    11, 12, 14, 24,
+                    31, 33, 41, 45,
+                    62, 63, 68, 69,
+                    71, 72, 75, 77,
+                    89, 92, 98, 0
+                ];
+                
                 for (let row = 0; row < gridY; row++) {
                     for (let col = 0; col < gridX; col++) {
                         let centroX = Math.floor(col * cellW + cellW / 2);
                         let centroY = Math.floor(row * cellH + cellH / 2);
                         
-                        // Pega média de cor numa área 20x20 no centro
-                        let r = 0, g = 0, b = 0, count = 0;
-                        for (let dy = -10; dy <= 10; dy++) {
-                            for (let dx = -10; dx <= 10; dx++) {
-                                let x = centroX + dx;
-                                let y = centroY + dy;
-                                if (x >= 0 && x < w && y >= 0 && y < h) {
-                                    let i = (y * w + x) * 4;
-                                    r += data[i];
-                                    g += data[i + 1];
-                                    b += data[i + 2];
-                                    count++;
+                        // Verifica se tem círculo branco nessa posição
+                        let temCirculo = false;
+                        let raio = Math.floor(Math.min(cellW, cellH) / 3);
+                        
+                        for (let angle = 0; angle < 360; angle += 30) {
+                            let rad = angle * Math.PI / 180;
+                            let x = Math.floor(centroX + raio * Math.cos(rad));
+                            let y = Math.floor(centroY + raio * Math.sin(rad));
+                            
+                            if (x >= 0 && x < w && y >= 0 && y < h) {
+                                let i = (y * w + x) * 4;
+                                let r = data[i];
+                                let g = data[i + 1];
+                                let b = data[i + 2];
+                                
+                                // Se achou branco = tem círculo
+                                if (r > 200 && g > 200 && b > 200) {
+                                    temCirculo = true;
+                                    break;
                                 }
                             }
                         }
-                        r = r / count;
-                        g = g / count;
-                        b = b / count;
                         
-                        // Se a média for laranja = tem número
-                        if (r > 200 && g > 100 && g < 180 && b < 100) {
-                            // Mapeia posição real da tua imagem
-                            let mapa = [
-                                11, 12, 14, 24,
-                                31, 33, 41, 45,
-                                62, 63, 68, 69,
-                                71, 72, 75, 77,
-                                89, 92, 98, 0
-                            ];
+                        if (temCirculo) {
                             let idx = row * gridX + col;
-                            numeros.push(mapa[idx].toString().padStart(2, '0'));
+                            numeros.push(mapaNumeros[idx].toString().padStart(2, '0'));
                         }
                     }
                 }
                 
                 if (numeros.length === 0) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não achei números. Corta só o quadrado laranja.';
+                    status.innerText = '❌ Não detectei círculos. Corta só o quadrado laranja sem borda.';
                     return;
                 }
                 
