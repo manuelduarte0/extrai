@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extrator de Números de Imagem</title>
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <script src='https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -15,7 +15,7 @@
             max-width: 800px;
             margin: 0 auto;
         }
-        h1 { text-align: center; margin-bottom: 20px; color: #0f3460; }
+        h1 { text-align: center; margin-bottom: 20px; color: #e94560; }
         
         #upload-area {
             background: #16213e;
@@ -28,7 +28,6 @@
             margin-bottom: 20px;
         }
         #upload-area:hover { background: #0f3460; border-color: #e94560; }
-        #upload-area.dragover { background: #e94560; border-color: #fff; }
         #file-input { display: none; }
         #preview {
             max-width: 100%;
@@ -50,19 +49,17 @@
             border-radius: 8px;
             cursor: pointer;
             margin: 10px 0;
-            transition: all 0.2s;
         }
         #btnExtrair {
             background: #e94560;
             display: none;
         }
-        #btnExtrair:hover { background: #c73e54; }
-        #btnExtrair:disabled { background: #555; cursor: not-allowed; }
+        #btnExtrair:active { background: #c73e54; }
+        #btnExtrair:disabled { background: #555; }
         #btnCopiar {
             background: #0f3460;
             display: none;
         }
-        #btnCopiar:hover { background: #16213e; }
         
         #status {
             text-align: center;
@@ -89,7 +86,7 @@
             display: none;
         }
         
-    .info {
+   .info {
             background: #0f3460;
             padding: 12px;
             border-radius: 8px;
@@ -103,12 +100,12 @@
     <h1>📸 Extrair Números de Imagem</h1>
     
     <div class="info">
-        Otimizado pra números laranja em círculo branco. Tira print reto da tela.
+        V4.0 - Versão mobile. Tira print só dos números, sem borda.
     </div>
     
     <div id="upload-area" onclick="document.getElementById('file-input').click()">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
-        <div style="font-size: 18px; font-weight: bold;">Clique ou arraste a imagem aqui</div>
+        <div style="font-size: 18px; font-weight: bold;">Clique aqui pra enviar a imagem</div>
         <div style="font-size: 14px; color: #aaa; margin-top: 8px;">PNG, JPG, JPEG</div>
     </div>
     
@@ -126,6 +123,7 @@
     <script>
         let imagemCarregada = null;
         let numerosExtraidos = '';
+        let worker = null;
         
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
@@ -137,21 +135,24 @@
         const resultado = document.getElementById('resultado');
         const btnCopiar = document.getElementById('btnCopiar');
         
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
+        // Inicializa worker do Tesseract
+        async function initTesseract() {
+            status.className = 'carregando';
+            status.innerText = 'Carregando OCR... Aguarde 3s';
+            try {
+                worker = await Tesseract.createWorker('eng');
+                await worker.setParameters({
+                    tessedit_char_whitelist: '0123456789',
+                    tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT
+                });
+                status.style.display = 'none';
+            } catch (e) {
+                status.className = 'erro';
+                status.innerText = '❌ Erro ao carregar OCR. Recarrega a página.';
+            }
+        }
         
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) carregarImagem(file);
-        });
+        initTesseract();
         
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -172,13 +173,22 @@
             reader.readAsDataURL(file);
         }
         
-        // Pré-processa: remove círculo branco, deixa só número laranja
         function processarImagem(img) {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
+            // Reduz tamanho pra processar mais rápido no mobile
+            const maxW = 800;
+            let w = img.width;
+            let h = img.height;
             
-            let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            if (w > maxW) {
+                h = (maxW / w) * h;
+                w = maxW;
+            }
+            
+            canvas.width = w;
+            canvas.height = h;
+            ctx.drawImage(img, 0, 0, w, h);
+            
+            let imageData = ctx.getImageData(0, 0, w, h);
             let data = imageData.data;
             
             for (let i = 0; i < data.length; i += 4) {
@@ -186,11 +196,9 @@
                 let g = data[i + 1];
                 let b = data[i + 2];
                 
-                // Detecta laranja/marrom do número: R alto, G médio, B baixo
-                let ehLaranja = r > 150 && g > 80 && g < 180 && b < 100;
-                
-                // Se for laranja = vira preto. Resto = branco
-                let cor = ehLaranja? 0 : 255;
+                // Se for laranja/amarelo do texto = preto. Resto = branco
+                let ehTexto = r > 180 && g > 100 && b < 120;
+                let cor = ehTexto? 0 : 255;
                 
                 data[i] = cor;
                 data[i + 1] = cor;
@@ -202,49 +210,41 @@
         }
         
         async function extrairNumeros() {
-            if (!imagemCarregada) return;
+            if (!imagemCarregada ||!worker) {
+                status.className = 'erro';
+                status.innerText = '❌ OCR não carregou ainda. Espera 3s e tenta de novo.';
+                return;
+            }
             
             btnExtrair.disabled = true;
             btnExtrair.innerText = '⏳ Processando...';
             status.className = 'carregando';
-            status.innerText = 'Pré-processando imagem...';
+            status.innerText = 'Preparando imagem...';
             
             const img = new Image();
             img.onload = async () => {
                 try {
-                    // Processa: isola números laranjas
                     const canvasProcessado = processarImagem(img);
+                    status.innerText = 'Lendo números...';
                     
-                    status.innerText = 'Lendo números... 0%';
+                    const { data: { text } } = await worker.recognize(canvasProcessado);
                     
-                    const { data: { text } } = await Tesseract.recognize(
-                        canvasProcessado,
-                        'eng',
-                        {
-                            logger: m => {
-                                if (m.status === 'recognizing text') {
-                                    status.innerText = `Lendo... ${Math.round(m.progress * 100)}%`;
-                                }
-                            },
-                            tessedit_char_whitelist: '0123456789',
-                            tessedit_pageseg_mode: '11', // sparse text
-                            tessedit_ocr_engine_mode: '3'
-                        }
-                    );
-                    
-                    // Pega só números de 2 dígitos
-                    const numeros = text.match(/\d{2}/g);
+                    // Pega números de 1 ou 2 dígitos
+                    const numeros = text.match(/\d{1,2}/g);
                     
                     if (!numeros || numeros.length === 0) {
                         status.className = 'erro';
-                        status.innerText = '❌ Nenhum número encontrado. Tenta tirar print mais de perto.';
+                        status.innerText = '❌ Não achei números. Tira print só da parte laranja.';
                         btnExtrair.disabled = false;
                         btnExtrair.innerText = '🔍 Extrair Números';
                         return;
                     }
                     
-                    // Remove duplicatas e ordena
-                    let numerosUnicos = [...new Set(numeros)].sort((a,b) => parseInt(a) - parseInt(b));
+                    // Remove duplicatas, filtra só 00-99, ordena
+                    let numerosUnicos = [...new Set(numeros)]
+                       .map(n => n.padStart(2, '0'))
+                       .filter(n => parseInt(n) >= 0 && parseInt(n) <= 99)
+                       .sort((a,b) => parseInt(a) - parseInt(b));
                     
                     numerosExtraidos = numerosUnicos.join(', ');
                     resultado.innerText = numerosExtraidos;
@@ -256,7 +256,7 @@
                     
                 } catch (error) {
                     status.className = 'erro';
-                    status.innerText = '❌ Erro ao processar. Tenta um print mais nítido.';
+                    status.innerText = '❌ Erro: ' + error.message;
                     console.error(error);
                 }
                 
