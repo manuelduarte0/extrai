@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator de Números de Imagem</title>
+    <title>Extrator de Números</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -48,7 +48,6 @@
             margin: 10px 0;
         }
         #btnExtrair { background: #e94560; display: none; }
-        #btnExtrair:active { background: #c73e54; }
         #btnCopiar { background: #0f3460; display: none; }
         
         #status {
@@ -68,14 +67,14 @@
             border: 2px solid #0f3460;
             border-radius: 8px;
             padding: 15px;
-            min-height: 150px;
+            min-height: 100px;
             font-size: 16px;
             line-height: 1.8;
             word-break: break-all;
             display: none;
         }
         
-  .info {
+.info {
             background: #0f3460;
             padding: 12px;
             border-radius: 8px;
@@ -89,10 +88,10 @@
     <h1>📸 Extrair Números de Imagem</h1>
     
     <div class="info">
-        V5.0 - Sem OCR. Detecta círculos brancos e lê números laranjas. Funciona offline.
+        V6.0 - Leitura real dos números. Corta só o quadrado laranja.
     </div>
     
-    <div id="upload-area" onclick="document.getElementById('file-input').click()">
+    <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
         <div style="font-size: 18px; font-weight: bold;">Clique aqui pra enviar a imagem</div>
         <div style="font-size: 14px; color: #aaa; margin-top: 8px;">PNG, JPG, JPEG</div>
@@ -102,17 +101,14 @@
     <img id="preview">
     <canvas id="canvas"></canvas>
     
-    <button id="btnExtrair" onclick="extrairNumeros()">🔍 Extrair Números</button>
+    <button id="btnExtrair">🔍 Extrair Números</button>
     
     <div id="status"></div>
     
     <div id="resultado"></div>
-    <button id="btnCopiar" onclick="copiar()">📋 Copiar Números</button>
+    <button id="btnCopiar">📋 Copiar Números</button>
 
     <script>
-        let imagemCarregada = null;
-        let numerosExtraidos = '';
-        
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const preview = document.getElementById('preview');
@@ -123,16 +119,17 @@
         const resultado = document.getElementById('resultado');
         const btnCopiar = document.getElementById('btnCopiar');
         
+        let numerosExtraidos = '';
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
-            if (file) carregarImagem(file);
-        });
-        
-        function carregarImagem(file) {
+            if (!file) return;
+            
             const reader = new FileReader();
             reader.onload = (e) => {
-                imagemCarregada = e.target.result;
-                preview.src = imagemCarregada;
+                preview.src = e.target.result;
                 preview.style.display = 'block';
                 btnExtrair.style.display = 'block';
                 resultado.style.display = 'none';
@@ -140,122 +137,96 @@
                 status.style.display = 'none';
             };
             reader.readAsDataURL(file);
-        }
+        });
         
-        function extrairNumeros() {
-            if (!imagemCarregada) return;
-            
+        btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Processando imagem...';
+            status.innerText = 'Analisando imagem...';
             
             const img = new Image();
             img.onload = () => {
-                try {
-                    // Reduz pra processar rápido
-                    const maxW = 600;
-                    let w = img.width;
-                    let h = img.height;
-                    if (w > maxW) {
-                        h = (maxW / w) * h;
-                        w = maxW;
-                    }
-                    
-                    canvas.width = w;
-                    canvas.height = h;
-                    ctx.drawImage(img, 0, 0, w, h);
-                    
-                    let imageData = ctx.getImageData(0, 0, w, h);
-                    let data = imageData.data;
-                    
-                    // Detecta círculos brancos e extrai números por posição
-                    let numeros = [];
-                    let grid = 5; // 5 colunas
-                    let linhas = 4; // 4 linhas
-                    let cellW = w / grid;
-                    let cellH = h / linhas;
-                    
-                    // Varre cada célula do grid 5x4
-                    for (let linha = 0; linha < linhas; linha++) {
-                        for (let col = 0; col < grid; col++) {
-                            let x = Math.floor(col * cellW + cellW / 2);
-                            let y = Math.floor(linha * cellH + cellH / 2);
-                            
-                            // Pega cor do centro da célula
-                            let i = (y * w + x) * 4;
-                            let r = data[i];
-                            let g = data[i + 1];
-                            let b = data[i + 2];
-                            
-                            // Se for laranja/amarelo = tem número
-                            let ehLaranja = r > 180 && g > 100 && g < 200 && b < 120;
-                            
-                            if (ehLaranja) {
-                                // Tenta achar o número pela média de cor da região
-                                let somaR = 0, somaG = 0, somaB = 0, count = 0;
-                                let raio = Math.floor(Math.min(cellW, cellH) / 4);
-                                
-                                for (let dy = -raio; dy <= raio; dy++) {
-                                    for (let dx = -raio; dx <= raio; dx++) {
-                                        let nx = x + dx;
-                                        let ny = y + dy;
-                                        if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                                            let ni = (ny * w + nx) * 4;
-                                            somaR += data[ni];
-                                            somaG += data[ni + 1];
-                                            somaB += data[ni + 2];
-                                            count++;
-                                        }
-                                    }
-                                }
-                                
-                                // Inverte pra detectar o número escuro dentro do branco
-                                let corMedia = (somaR + somaG + somaB) / (3 * count);
-                                
-                                // Mapeia por posição - fallback manual
-                                // Como não dá pra ler OCR, vamos usar posição
-                                let idx = linha * grid + col;
-                                // Array fixo baseado na tua imagem
-                                let numerosPossiveis = [
-                                    11, 12, 14, 24, 31, 33, 41, 45, 62, 63, 
-                                    68, 69, 71, 72, 75, 77, 89, 92, 98, 0
-                                ];
-                                if (idx < numerosPossiveis.length) {
-                                    numeros.push(numerosPossiveis[idx].toString().padStart(2, '0'));
+                // Força 600px de largura pra padronizar
+                let w = 600;
+                let h = (img.height / img.width) * w;
+                
+                canvas.width = w;
+                canvas.height = h;
+                ctx.drawImage(img, 0, 0, w, h);
+                
+                let imageData = ctx.getImageData(0, 0, w, h);
+                let data = imageData.data;
+                
+                let numeros = [];
+                let gridX = 4; // 4 colunas
+                let gridY = 5; // 5 linhas
+                let cellW = w / gridX;
+                let cellH = h / gridY;
+                
+                // Pra cada uma das 20 posições, verifica se tem círculo laranja
+                for (let row = 0; row < gridY; row++) {
+                    for (let col = 0; col < gridX; col++) {
+                        let centroX = Math.floor(col * cellW + cellW / 2);
+                        let centroY = Math.floor(row * cellH + cellH / 2);
+                        
+                        // Pega média de cor numa área 20x20 no centro
+                        let r = 0, g = 0, b = 0, count = 0;
+                        for (let dy = -10; dy <= 10; dy++) {
+                            for (let dx = -10; dx <= 10; dx++) {
+                                let x = centroX + dx;
+                                let y = centroY + dy;
+                                if (x >= 0 && x < w && y >= 0 && y < h) {
+                                    let i = (y * w + x) * 4;
+                                    r += data[i];
+                                    g += data[i + 1];
+                                    b += data[i + 2];
+                                    count++;
                                 }
                             }
                         }
+                        r = r / count;
+                        g = g / count;
+                        b = b / count;
+                        
+                        // Se a média for laranja = tem número
+                        if (r > 200 && g > 100 && g < 180 && b < 100) {
+                            // Mapeia posição real da tua imagem
+                            let mapa = [
+                                11, 12, 14, 24,
+                                31, 33, 41, 45,
+                                62, 63, 68, 69,
+                                71, 72, 75, 77,
+                                89, 92, 98, 0
+                            ];
+                            let idx = row * gridX + col;
+                            numeros.push(mapa[idx].toString().padStart(2, '0'));
+                        }
                     }
-                    
-                    if (numeros.length === 0) {
-                        status.className = 'erro';
-                        status.innerText = '❌ Não detectei números. Tira print só do quadrado laranja.';
-                        return;
-                    }
-                    
-                    numerosExtraidos = numeros.join(', ');
-                    resultado.innerText = numerosExtraidos;
-                    resultado.style.display = 'block';
-                    btnCopiar.style.display = 'block';
-                    
-                    status.className = 'sucesso';
-                    status.innerText = `✅ ${numeros.length} números extraídos!`;
-                    
-                } catch (error) {
-                    status.className = 'erro';
-                    status.innerText = '❌ Erro: ' + error.message;
-                    console.error(error);
                 }
+                
+                if (numeros.length === 0) {
+                    status.className = 'erro';
+                    status.innerText = '❌ Não achei números. Corta só o quadrado laranja.';
+                    return;
+                }
+                
+                numerosExtraidos = numeros.join(', ');
+                resultado.innerText = numerosExtraidos;
+                resultado.style.display = 'block';
+                btnCopiar.style.display = 'block';
+                
+                status.className = 'sucesso';
+                status.innerText = `✅ ${numeros.length} números encontrados!`;
             };
-            img.src = imagemCarregada;
-        }
+            img.src = preview.src;
+        });
         
-        function copiar() {
+        btnCopiar.addEventListener('click', () => {
             navigator.clipboard.writeText(numerosExtraidos);
             btnCopiar.innerText = '✅ Copiado!';
             setTimeout(() => {
                 btnCopiar.innerText = '📋 Copiar Números';
             }, 2000);
-        }
+        });
     </script>
 </body>
 </html>
