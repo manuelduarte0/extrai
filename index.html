@@ -89,7 +89,7 @@
             display: none;
         }
         
-      .info {
+    .info {
             background: #0f3460;
             padding: 12px;
             border-radius: 8px;
@@ -103,7 +103,7 @@
     <h1>📸 Extrair Números de Imagem</h1>
     
     <div class="info">
-        Otimizado pra números brancos em fundo colorido. Tira print reto da tela.
+        Otimizado pra números laranja em círculo branco. Tira print reto da tela.
     </div>
     
     <div id="upload-area" onclick="document.getElementById('file-input').click()">
@@ -172,29 +172,25 @@
             reader.readAsDataURL(file);
         }
         
-        // Pré-processa a imagem pra melhorar OCR
+        // Pré-processa: remove círculo branco, deixa só número laranja
         function processarImagem(img) {
             canvas.width = img.width;
             canvas.height = img.height;
-            
-            // Desenha imagem original
             ctx.drawImage(img, 0, 0);
             
-            // Pega os pixels
             let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             let data = imageData.data;
             
-            // Converte pra preto e branco com threshold alto
             for (let i = 0; i < data.length; i += 4) {
                 let r = data[i];
                 let g = data[i + 1];
                 let b = data[i + 2];
                 
-                // Calcula brilho
-                let brilho = (r + g + b) / 3;
+                // Detecta laranja/marrom do número: R alto, G médio, B baixo
+                let ehLaranja = r > 150 && g > 80 && g < 180 && b < 100;
                 
-                // Se for claro = branco, se for escuro = preto
-                let cor = brilho > 140? 255 : 0;
+                // Se for laranja = vira preto. Resto = branco
+                let cor = ehLaranja? 0 : 255;
                 
                 data[i] = cor;
                 data[i + 1] = cor;
@@ -216,43 +212,47 @@
             const img = new Image();
             img.onload = async () => {
                 try {
-                    // Pré-processa: converte pra P&B com alto contraste
+                    // Processa: isola números laranjas
                     const canvasProcessado = processarImagem(img);
                     
                     status.innerText = 'Lendo números... 0%';
                     
                     const { data: { text } } = await Tesseract.recognize(
                         canvasProcessado,
-                        'eng', // inglês lê número melhor
+                        'eng',
                         {
                             logger: m => {
                                 if (m.status === 'recognizing text') {
                                     status.innerText = `Lendo... ${Math.round(m.progress * 100)}%`;
                                 }
                             },
-                            tessedit_char_whitelist: '0123456789', // só números
-                            tessedit_pageseg_mode: '6' // modo de bloco único
+                            tessedit_char_whitelist: '0123456789',
+                            tessedit_pageseg_mode: '11', // sparse text
+                            tessedit_ocr_engine_mode: '3'
                         }
                     );
                     
-                    // Extrai só números de 2 dígitos
+                    // Pega só números de 2 dígitos
                     const numeros = text.match(/\d{2}/g);
                     
                     if (!numeros || numeros.length === 0) {
                         status.className = 'erro';
-                        status.innerText = '❌ Nenhum número encontrado. Tenta printar a tela mais de perto.';
+                        status.innerText = '❌ Nenhum número encontrado. Tenta tirar print mais de perto.';
                         btnExtrair.disabled = false;
                         btnExtrair.innerText = '🔍 Extrair Números';
                         return;
                     }
                     
-                    numerosExtraidos = numeros.join(', ');
+                    // Remove duplicatas e ordena
+                    let numerosUnicos = [...new Set(numeros)].sort((a,b) => parseInt(a) - parseInt(b));
+                    
+                    numerosExtraidos = numerosUnicos.join(', ');
                     resultado.innerText = numerosExtraidos;
                     resultado.style.display = 'block';
                     btnCopiar.style.display = 'block';
                     
                     status.className = 'sucesso';
-                    status.innerText = `✅ ${numeros.length} números encontrados!`;
+                    status.innerText = `✅ ${numerosUnicos.length} números encontrados!`;
                     
                 } catch (error) {
                     status.className = 'erro';
