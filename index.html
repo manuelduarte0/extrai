@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator Auto-Corte</title>
+    <title>Extrator Final</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -95,16 +95,16 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator Auto-Corte V12.0</h1>
+    <h1>🔴 Extrator Final V13.0</h1>
     
     <div class="info">
-        V12.0 - Detecta o quadrado laranja sozinho. Manda print da tela inteira que funciona.
+        V13.0 - Detecta SÓ o quadrado laranja maior. Ignora barra de cima. Grid sempre 4x5.
     </div>
     
     <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
-        <div style="font-size: 18px; font-weight: bold;">Manda o print da tela inteira</div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Ele corta o laranja sozinho</div>
+        <div style="font-size: 18px; font-weight: bold;">Manda print da tela inteira</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Agora vai pegar o quadrado certo</div>
     </div>
     
     <input type="file" id="file-input" accept="image/*">
@@ -112,7 +112,7 @@
     <canvas id="canvas"></canvas>
     <canvas id="canvasProcessada"></canvas>
     
-    <button id="btnExtrair">🔍 Auto-Cortar + Extrair</button>
+    <button id="btnExtrair">🔍 Extrair Números</button>
     
     <div id="status"></div>
     
@@ -153,96 +153,121 @@
             reader.readAsDataURL(file);
         });
         
-        // Padrões melhorados pra dígitos distorcidos
-        const DIGITOS = {
-            '01110100011000101110': '0',
-            '00100010001000100010': '1',
-            '11100001001111': '2',
-            '11100001001100001111': '3',
-            '1001010010111100100': '4',
-            '11110100001110001111': '5',
-            '01110100001111010111': '6',
-            '11100010001000100010': '7',
-            '01110101001110101110': '8',
-            '01110101001110001110': '9'
-        };
-        
-        function reconhecerDigito(imgData, x, y, w, h) {
-            let matriz = '';
-            let stepY = h / 5;
-            let stepX = w / 4; // 4 colunas pra pegar dígito melhor
+        // Templates de dígitos mais robustos
+        function matchDigit(pattern) {
+            const templates = {
+                '01110100011000101110': '0',
+                '00100010001000100010': '1', 
+                '111000010011100010111': '2',
+                '111000010011100001111': '3',
+                '1001010010111100100': '4',
+                '111101000011100001111': '5',
+                '01110100001111010111': '6',
+                '11100010001000100010': '7',
+                '01110101001110101110': '8',
+                '01110101001110001110': '9'
+            };
             
-            for (let row = 0; row < 5; row++) {
-                for (let col = 0; col < 4; col++) {
-                    let laranja = 0;
-                    let total = 0;
-                    for (let dy = 0; dy < stepY; dy++) {
-                        for (let dx = 0; dx < stepX; dx++) {
-                            let px = Math.floor(x + col * stepX + dx);
-                            let py = Math.floor(y + row * stepY + dy);
-                            if (px >= 0 && px < imgData.width && py >= 0 && py < imgData.height) {
-                                let i = (py * imgData.width + px) * 4;
-                                let r = imgData.data[i];
-                                let g = imgData.data[i + 1];
-                                let b = imgData.data[i + 2];
-                                if (r > 140 && g < 180 && b < 140) laranja++;
-                                total++;
-                            }
-                        }
-                    }
-                    matriz += (laranja / total > 0.25)? '1' : '0';
+            // Calcula similaridade com cada template
+            let bestMatch = '?';
+            let bestScore = 0;
+            for (let tmpl in templates) {
+                if (tmpl.length!== pattern.length) continue;
+                let score = 0;
+                for (let i = 0; i < pattern.length; i++) {
+                    if (pattern[i] === tmpl[i]) score++;
+                }
+                score = score / pattern.length;
+                if (score > bestScore && score > 0.7) {
+                    bestScore = score;
+                    bestMatch = templates[tmpl];
                 }
             }
-            return DIGITOS[matriz] || '?';
+            return bestMatch;
         }
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Procurando quadrado laranja...';
+            status.innerText = 'Detectando quadrado laranja...';
             
             const img = new Image();
             img.onload = () => {
-                // 1. Acha o quadrado laranja na tela inteira
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
                 let imgData = ctx.getImageData(0, 0, img.width, img.height);
                 let data = imgData.data;
                 
-                let minX = img.width, maxX = 0, minY = img.height, maxY = 0;
-                let achouLaranja = false;
+                // 1. Acha todos os retângulos laranja e pega o MAIOR
+                let regions = [];
+                let visited = new Uint8Array(img.width * img.height);
                 
                 for (let y = 0; y < img.height; y++) {
                     for (let x = 0; x < img.width; x++) {
-                        let i = (y * img.width + x) * 4;
+                        let idx = y * img.width + x;
+                        if (visited[idx]) continue;
+                        
+                        let i = idx * 4;
                         let r = data[i], g = data[i+1], b = data[i+2];
-                        // Laranja do fundo
-                        if (r > 180 && g > 80 && g < 180 && b < 100) {
-                            achouLaranja = true;
-                            minX = Math.min(minX, x);
-                            maxX = Math.max(maxX, x);
-                            minY = Math.min(minY, y);
-                            maxY = Math.max(maxY, y);
+                        
+                        // Laranja do fundo do jogo: R>180, G entre 90-160, B<100
+                        if (r > 180 && g > 90 && g < 160 && b < 100) {
+                            // Flood fill pra achar o retângulo
+                            let stack = [[x, y]];
+                            let minX = x, maxX = x, minY = y, maxY = y;
+                            let count = 0;
+                            
+                            while (stack.length > 0) {
+                                let [cx, cy] = stack.pop();
+                                let cidx = cy * img.width + cx;
+                                if (visited[cidx]) continue;
+                                visited[cidx] = 1;
+                                
+                                let ci = cidx * 4;
+                                let cr = data[ci], cg = data[ci+1], cb = data[ci+2];
+                                if (cr > 180 && cg > 90 && cg < 160 && cb < 100) {
+                                    count++;
+                                    minX = Math.min(minX, cx);
+                                    maxX = Math.max(maxX, cx);
+                                    minY = Math.min(minY, cy);
+                                    maxY = Math.max(maxY, cy);
+                                    
+                                    if (cx > 0) stack.push([cx-1, cy]);
+                                    if (cx < img.width-1) stack.push([cx+1, cy]);
+                                    if (cy > 0) stack.push([cx, cy-1]);
+                                    if (cy < img.height-1) stack.push([cx, cy+1]);
+                                }
+                            }
+                            
+                            let w = maxX - minX;
+                            let h = maxY - minY;
+                            // Só considera se for grande e mais largo que alto
+                            if (count > 10000 && w > h * 0.7) {
+                                regions.push({x: minX, y: minY, w: w, h: h, area: w*h});
+                            }
                         }
                     }
                 }
                 
-                if (!achouLaranja) {
+                if (regions.length === 0) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não achei quadrado laranja na imagem';
+                    status.innerText = '❌ Não achei quadrado laranja';
                     return;
                 }
                 
-                // 2. Recorta só o quadrado laranja
-                let cropW = maxX - minX;
-                let cropH = maxY - minY;
-                let cropData = ctx.getImageData(minX, minY, cropW, cropH);
+                // Pega o maior retângulo
+                regions.sort((a,b) => b.area - a.area);
+                let rect = regions[0];
                 
-                // 3. Redimensiona pra 400x500 pra manter proporção
+                status.className = 'info';
+                status.innerText = 'Lendo números do grid 4x5...';
+                
+                // 2. Recorta e processa só o grid
+                let cropData = ctx.getImageData(rect.x, rect.y, rect.w, rect.h);
                 canvas.width = 400;
                 canvas.height = 500;
                 ctx.putImageData(cropData, 0, 0);
-                ctx.drawImage(canvas, 0, 0, cropW, cropH, 0, 0, 400, 500);
+                ctx.drawImage(canvas, 0, 0, rect.w, rect.h, 0, 0, 400, 500);
                 
                 let imageData = ctx.getImageData(0, 0, 400, 500);
                 data = imageData.data;
@@ -258,26 +283,27 @@
                 
                 for (let row = 0; row < gridY; row++) {
                     for (let col = 0; col < gridX; col++) {
-                        let startX = Math.floor(col * cellW);
-                        let startY = Math.floor(row * cellH);
-                        let endX = Math.floor((col + 1) * cellW);
-                        let endY = Math.floor((row + 1) * cellH);
+                        let startX = Math.floor(col * cellW + cellW*0.1);
+                        let startY = Math.floor(row * cellH + cellH*0.1);
+                        let endX = Math.floor((col + 1) * cellW - cellW*0.1);
+                        let endY = Math.floor((row + 1) * cellH - cellH*0.1);
                         
-                        let temLaranja = false;
-                        let digitMinX = endX, digitMaxX = startX, digitMinY = endY, digitMaxY = startY;
+                        let temNumero = false;
+                        let digitBounds = {minX: endX, maxX: startX, minY: endY, maxY: startY};
                         
                         for (let y = startY; y < endY; y++) {
                             for (let x = startX; x < endX; x++) {
                                 let i = (y * 400 + x) * 4;
                                 let r = data[i], g = data[i+1], b = data[i+2];
                                 
-                                if (r > 160 && g > 70 && g < 200 && b < 130) {
-                                    temLaranja = true;
+                                // Número laranja dentro do círculo
+                                if (r > 150 && g > 70 && g < 190 && b < 130 && r-g > 20) {
+                                    temNumero = true;
                                     out[i] = 255; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
-                                    digitMinX = Math.min(digitMinX, x);
-                                    digitMaxX = Math.max(digitMaxX, x);
-                                    digitMinY = Math.min(digitMinY, y);
-                                    digitMaxY = Math.max(digitMaxY, y);
+                                    digitBounds.minX = Math.min(digitBounds.minX, x);
+                                    digitBounds.maxX = Math.max(digitBounds.maxX, x);
+                                    digitBounds.minY = Math.min(digitBounds.minY, y);
+                                    digitBounds.maxY = Math.max(digitBounds.maxY, y);
                                 } else if (r > 180 && g > 180 && b > 180) {
                                     out[i] = 255; out[i+1] = 255; out[i+2] = 255; out[i+3] = 255;
                                 } else {
@@ -286,17 +312,40 @@
                             }
                         }
                         
-                        if (temLaranja) {
-                            let dW = digitMaxX - digitMinX;
-                            let dH = digitMaxY - digitMinY;
+                        if (temNumero) {
+                            let dW = digitBounds.maxX - digitBounds.minX;
+                            let dH = digitBounds.maxY - digitBounds.minY;
                             
-                            // Dois dígitos se largura > 60% da altura
-                            if (dW > dH * 0.6) {
-                                let d1 = reconhecerDigito(imageData, digitMinX, digitMinY, dW/2, dH);
-                                let d2 = reconhecerDigito(imageData, digitMinX + dW/2, digitMinY, dW/2, dH);
+                            // Extrai matriz 5x5 do dígito
+                            let pattern = '';
+                            for (let r = 0; r < 5; r++) {
+                                for (let c = 0; c < 5; c++) {
+                                    let px = Math.floor(digitBounds.minX + c * dW / 5);
+                                    let py = Math.floor(digitBounds.minY + r * dH / 5);
+                                    let i = (py * 400 + px) * 4;
+                                    pattern += (data[i] > 150 && data[i+1] < 150)? '1' : '0';
+                                }
+                            }
+                            
+                            // Dois dígitos se for largo
+                            if (dW > dH * 0.65) {
+                                let p1 = '', p2 = '';
+                                for (let r = 0; r < 5; r++) {
+                                    for (let c = 0; c < 5; c++) {
+                                        let px1 = Math.floor(digitBounds.minX + c * dW / 10);
+                                        let px2 = Math.floor(digitBounds.minX + dW/2 + c * dW / 10);
+                                        let py = Math.floor(digitBounds.minY + r * dH / 5);
+                                        let i1 = (py * 400 + px1) * 4;
+                                        let i2 = (py * 400 + px2) * 4;
+                                        p1 += (data[i1] > 150 && data[i1+1] < 150)? '1' : '0';
+                                        p2 += (data[i2] > 150 && data[i2+1] < 150)? '1' : '0';
+                                    }
+                                }
+                                let d1 = matchDigit(p1);
+                                let d2 = matchDigit(p2);
                                 if (d1!== '?' && d2!== '?') numeros.push(d1 + d2);
                             } else {
-                                let d = reconhecerDigito(imageData, digitMinX, digitMinY, dW, dH);
+                                let d = matchDigit(pattern);
                                 if (d!== '?') numeros.push('0' + d);
                             }
                         }
@@ -318,7 +367,7 @@
                 btnCopiar.style.display = 'block';
                 
                 status.className = 'sucesso';
-                status.innerText = `✅ ${numeros.length} números lidos do quadrado laranja!`;
+                status.innerText = `✅ ${numeros.length} números extraídos!`;
             };
             img.src = preview.src;
         });
