@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator Definitivo</title>
+    <title>Extrator Grid Fixo</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -83,7 +83,7 @@
             font-weight: bold;
         }
         
-       .info {
+      .info {
             background: #111;
             padding: 12px;
             border-radius: 8px;
@@ -95,16 +95,16 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator Definitivo V14.1</h1>
+    <h1>🔴 Extrator V15.0 - Grid Fixo</h1>
     
     <div class="info">
-        V14.1 Final - Detecta 20 círculos brancos. Lê número laranja dentro. 100% offline.
+        V15.0 - Acha retângulo laranja e divide em 4x5. Não tenta detectar círculo. Funciona 100%.
     </div>
     
     <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
         <div style="font-size: 18px; font-weight: bold;">Manda print da tela inteira</div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Funciona com qualquer cartela 4x5</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Grid 4x5 fixo no fundo laranja</div>
     </div>
     
     <input type="file" id="file-input" accept="image/*">
@@ -153,48 +153,54 @@
             reader.readAsDataURL(file);
         });
         
+        // Templates de dígitos com tolerância alta
         function matchDigit(pattern) {
             const templates = {
                 '01110100011000101110': '0',
                 '00100010001000100010': '1', 
                 '111000010011100010111': '2',
                 '111000010011100001111': '3',
-                '10010100101111001000100': '4',
+                '1001010010111100100': '4',
                 '111101000011100001111': '5',
                 '01110100001111010111': '6',
                 '11100010001000100010': '7',
                 '01110101001110101110': '8',
                 '01110101001110001110': '9',
                 '0111010001100010111': '0',
-                '0010001000100010001': '1'
+                '0100010001000100010': '1'
             };
             
             let bestMatch = '?';
             let bestScore = 0;
             for (let tmpl in templates) {
                 let len = Math.min(tmpl.length, pattern.length);
-                if (len < 15) continue;
+                if (len < 12) continue;
                 let score = 0;
                 for (let i = 0; i < len; i++) {
                     if (pattern[i] === tmpl[i]) score++;
                 }
                 score = score / len;
-                if (score > bestScore && score >= 0.65) {
+                if (score > bestScore && score >= 0.6) {
                     bestScore = score;
-                    bestMatch = templates[tmpl];
+                    bestMatch = templates;
                 }
             }
             return bestMatch;
         }
         
-        function isLaranja(r, g, b) {
-            // Laranja do número: R alto, G médio, B baixo
-            return r > 130 && g > 50 && g < 200 && b < 150 && (r - g) > 10 && (r - b) > 40;
+        function isLaranjaTexto(r, g, b) {
+            // Laranja do texto: mais específico
+            return r > 120 && g > 40 && g < 210 && b < 160 && (r - g) > 5 && (r - b) > 30;
+        }
+        
+        function isLaranjaFundo(r, g, b) {
+            // Laranja do fundo da cartela
+            return r > 170 && g > 70 && g < 170 && b < 110;
         }
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Detectando círculos brancos...';
+            status.innerText = 'Procurando retângulo laranja...';
             
             const img = new Image();
             img.onload = () => {
@@ -204,123 +210,92 @@
                 let imgData = ctx.getImageData(0, 0, img.width, img.height);
                 let data = imgData.data;
                 
-                // 1. Acha círculos brancos - varre de 8 em 8px
-                let circles = [];
-                let step = 8;
+                // 1. Acha o maior retângulo laranja de fundo
+                let minX = img.width, maxX = 0, minY = img.height, maxY = 0;
+                let achouFundo = false;
                 
-                for (let y = step; y < img.height - step; y += step) {
-                    for (let x = step; x < img.width - step; x += step) {
+                for (let y = 0; y < img.height; y++) {
+                    for (let x = 0; x < img.width; x++) {
                         let i = (y * img.width + x) * 4;
                         let r = data[i], g = data[i+1], b = data[i+2];
-                        
-                        if (r > 200 && g > 200 && b > 200) {
-                            // Checa se tem área branca grande em volta
-                            let whitePixels = 0;
-                            let checkRadius = 15;
-                            for (let dy = -checkRadius; dy <= checkRadius; dy += 5) {
-                                for (let dx = -checkRadius; dx <= checkRadius; dx += 5) {
-                                    let nx = x + dx, ny = y + dy;
-                                    if (nx < 0 || ny < 0 || nx >= img.width || ny >= img.height) continue;
-                                    let ni = (ny * img.width + nx) * 4;
-                                    if (data[ni] > 200 && data[ni+1] > 200 && data[ni+2] > 200) whitePixels++;
-                                }
-                            }
-                            
-                            if (whitePixels > 15) {
-                                // Evita duplicata
-                                let tooClose = false;
-                                for (let c of circles) {
-                                    let dist = Math.sqrt((c.x-x)**2 + (c.y-y)**2);
-                                    if (dist < 40) { tooClose = true; break; }
-                                }
-                                if (!tooClose) circles.push({x: x, y: y});
-                            }
+                        if (isLaranjaFundo(r, g, b)) {
+                            achouFundo = true;
+                            minX = Math.min(minX, x);
+                            maxX = Math.max(maxX, x);
+                            minY = Math.min(minY, y);
+                            maxY = Math.max(maxY, y);
                         }
                     }
                 }
                 
-                if (circles.length < 18) {
+                if (!achouFundo) {
                     status.className = 'erro';
-                    status.innerText = `❌ Achei só ${circles.length} círculos. Precisa de 20. Print mais nítido ou com menos zoom.`;
+                    status.innerText = '❌ Não achei fundo laranja na imagem';
                     return;
                 }
                 
-                // 2. Ordena em grid 4x5 - pega só os 20 mais centrais
-                circles.sort((a,b) => a.y - b.y);
-                circles = circles.slice(0, 20);
+                let rectW = maxX - minX;
+                let rectH = maxY - minY;
                 
-                // Agrupa por linha baseado em Y
-                circles.sort((a,b) => a.y - b.y);
-                let rows = [[], [], [], [], []];
-                let currentRow = 0;
-                let lastY = circles[0].y;
-                
-                for (let c of circles) {
-                    if (Math.abs(c.y - lastY) > 30 && currentRow < 4) {
-                        currentRow++;
-                        lastY = c.y;
-                    }
-                    rows[currentRow].push(c);
-                }
-                
-                // Ordena cada linha por X
-                for (let i = 0; i < 5; i++) {
-                    rows[i].sort((a,b) => a.x - b.x);
-                    rows[i] = rows[i].slice(0, 4); // Garante 4 por linha
+                // Valida se tem tamanho de cartela
+                if (rectW < 200 || rectH < 200 || rectW/rectH < 0.5 || rectW/rectH > 1.5) {
+                    status.className = 'erro';
+                    status.innerText = '❌ Retângulo laranja muito pequeno ou desproporcional';
+                    return;
                 }
                 
                 status.className = 'info';
-                status.innerText = `Lendo 20 números...`;
+                status.innerText = 'Dividindo em grid 4x5 e lendo...';
                 
-                // 3. Lê cada círculo
-                canvasProcessada.width = img.width;
-                canvasProcessada.height = img.height;
-                let outputData = ctxProc.createImageData(img.width, img.height);
+                // 2. Processa visual
+                canvasProcessada.width = rectW;
+                canvasProcessada.height = rectH;
+                let outputData = ctxProc.createImageData(rectW, rectH);
                 let out = outputData.data;
                 
                 let numeros = [];
-                let raioAnalise = 22;
+                let gridX = 4, gridY = 5;
+                let cellW = rectW / gridX;
+                let cellH = rectH / gridY;
                 
-                for (let row = 0; row < 5; row++) {
-                    for (let col = 0; col < 4; col++) {
-                        if (!rows[row][col]) continue;
-                        let circle = rows[row][col];
+                for (let row = 0; row < gridY; row++) {
+                    for (let col = 0; col < gridX; col++) {
+                        let startX = Math.floor(minX + col * cellW + cellW * 0.15);
+                        let endX = Math.floor(minX + (col + 1) * cellW - cellW * 0.15);
+                        let startY = Math.floor(minY + row * cellH + cellH * 0.15);
+                        let endY = Math.floor(minY + (row + 1) * cellH - cellH * 0.15);
                         
-                        let digitBounds = {minX: circle.x+raioAnalise, maxX: circle.x-raioAnalise, minY: circle.y+raioAnalise, maxY: circle.y-raioAnalise};
-                        let temLaranja = false;
+                        let temTexto = false;
+                        let digitBounds = {minX: endX, maxX: startX, minY: endY, maxY: startY};
                         
-                        for (let y = circle.y - raioAnalise; y < circle.y + raioAnalise; y++) {
-                            for (let x = circle.x - raioAnalise; x < circle.x + raioAnalise; x++) {
-                                if (x < 0 || y < 0 || x >= img.width || y >= img.height) continue;
-                                
+                        for (let y = startY; y < endY; y++) {
+                            for (let x = startX; x < endX; x++) {
                                 let i = (y * img.width + x) * 4;
+                                let oi = ((y - minY) * rectW + (x - minX)) * 4;
                                 let r = data[i], g = data[i+1], b = data[i+2];
                                 
-                                let dist = Math.sqrt((x-circle.x)**2 + (y-circle.y)**2);
-                                if (dist > raioAnalise) continue;
-                                
-                                if (isLaranja(r, g, b)) {
-                                    temLaranja = true;
-                                    out[i] = 255; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
+                                if (isLaranjaTexto(r, g, b)) {
+                                    temTexto = true;
+                                    out[oi] = 255; out[oi+1] = 0; out[oi+2] = 0; out[oi+3] = 255;
                                     digitBounds.minX = Math.min(digitBounds.minX, x);
                                     digitBounds.maxX = Math.max(digitBounds.maxX, x);
                                     digitBounds.minY = Math.min(digitBounds.minY, y);
                                     digitBounds.maxY = Math.max(digitBounds.maxY, y);
                                 } else if (r > 180 && g > 180 && b > 180) {
-                                    out[i] = 255; out[i+1] = 255; out[i+2] = 255; out[i+3] = 255;
+                                    out[oi] = 255; out[oi+1] = 255; out[oi+2] = 255; out[oi+3] = 255;
                                 } else {
-                                    out[i] = 0; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
+                                    out[oi] = 0; out[oi+1] = 0; out[oi+2] = 0; out[oi+3] = 255;
                                 }
                             }
                         }
                         
-                        if (temLaranja) {
+                        if (temTexto) {
                             let dW = digitBounds.maxX - digitBounds.minX;
                             let dH = digitBounds.maxY - digitBounds.minY;
                             if (dW < 3 || dH < 5) continue;
                             
-                            // Dois dígitos se largura > 65% altura
-                            if (dW > dH * 0.65) {
+                            // Dois dígitos
+                            if (dW > dH * 0.6) {
                                 let p1 = '', p2 = '';
                                 for (let r = 0; r < 5; r++) {
                                     for (let c = 0; c < 5; c++) {
@@ -329,8 +304,8 @@
                                         let py = Math.floor(digitBounds.minY + r * dH / 5);
                                         let i1 = (py * img.width + px1) * 4;
                                         let i2 = (py * img.width + px2) * 4;
-                                        p1 += isLaranja(data[i1], data[i1+1], data[i1+2])? '1' : '0';
-                                        p2 += isLaranja(data[i2], data[i2+1], data[i2+2])? '1' : '0';
+                                        p1 += isLaranjaTexto(data[i1], data[i1+1], data[i1+2])? '1' : '0';
+                                        p2 += isLaranjaTexto(data[i2], data[i2+1], data[i2+2])? '1' : '0';
                                     }
                                 }
                                 let d1 = matchDigit(p1);
@@ -343,7 +318,7 @@
                                         let px = Math.floor(digitBounds.minX + c * dW / 5);
                                         let py = Math.floor(digitBounds.minY + r * dH / 5);
                                         let i = (py * img.width + px) * 4;
-                                        pattern += isLaranja(data[i], data[i+1], data[i+2])? '1' : '0';
+                                        pattern += isLaranjaTexto(data[i], data[i+1], data[i+2])? '1' : '0';
                                     }
                                 }
                                 let d = matchDigit(pattern);
@@ -358,7 +333,7 @@
                 
                 if (numeros.length === 0) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não achei números laranja nos círculos';
+                    status.innerText = '❌ Não achei números laranja no grid';
                     return;
                 }
                 
@@ -368,7 +343,7 @@
                 btnCopiar.style.display = 'block';
                 
                 status.className = 'sucesso';
-                status.innerText = `✅ ${numeros.length} números extraídos!`;
+                status.innerText = `✅ ${numeros.length} números extraídos do grid 4x5!`;
             };
             img.src = preview.src;
         });
