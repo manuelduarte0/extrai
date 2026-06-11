@@ -27,14 +27,8 @@
             transition: all 0.3s;
             margin-bottom: 20px;
         }
-        #upload-area:hover {
-            background: #0f3460;
-            border-color: #e94560;
-        }
-        #upload-area.dragover {
-            background: #e94560;
-            border-color: #fff;
-        }
+        #upload-area:hover { background: #0f3460; border-color: #e94560; }
+        #upload-area.dragover { background: #e94560; border-color: #fff; }
         #file-input { display: none; }
         #preview {
             max-width: 100%;
@@ -44,6 +38,7 @@
             border-radius: 8px;
             border: 2px solid #0f3460;
         }
+        #canvas { display: none; }
         
         button {
             width: 100%;
@@ -62,10 +57,7 @@
             display: none;
         }
         #btnExtrair:hover { background: #c73e54; }
-        #btnExtrair:disabled {
-            background: #555;
-            cursor: not-allowed;
-        }
+        #btnExtrair:disabled { background: #555; cursor: not-allowed; }
         #btnCopiar {
             background: #0f3460;
             display: none;
@@ -80,19 +72,9 @@
             font-weight: bold;
             display: none;
         }
-        #status.carregando {
-            background: #f39c12;
-            color: #000;
-            display: block;
-        }
-        #status.sucesso {
-            background: #27ae60;
-            display: block;
-        }
-        #status.erro {
-            background: #e74c3c;
-            display: block;
-        }
+        #status.carregando { background: #f39c12; color: #000; display: block; }
+        #status.sucesso { background: #27ae60; display: block; }
+        #status.erro { background: #e74c3c; display: block; }
         
         #resultado {
             background: #16213e;
@@ -107,7 +89,7 @@
             display: none;
         }
         
-       .info {
+      .info {
             background: #0f3460;
             padding: 12px;
             border-radius: 8px;
@@ -121,7 +103,7 @@
     <h1>📸 Extrair Números de Imagem</h1>
     
     <div class="info">
-        Tira print ou faz upload da imagem com os números. Vou extrair só os dígitos.
+        Otimizado pra números brancos em fundo colorido. Tira print reto da tela.
     </div>
     
     <div id="upload-area" onclick="document.getElementById('file-input').click()">
@@ -132,6 +114,7 @@
     
     <input type="file" id="file-input" accept="image/*">
     <img id="preview">
+    <canvas id="canvas"></canvas>
     
     <button id="btnExtrair" onclick="extrairNumeros()">🔍 Extrair Números</button>
     
@@ -147,12 +130,13 @@
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const preview = document.getElementById('preview');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
         const btnExtrair = document.getElementById('btnExtrair');
         const status = document.getElementById('status');
         const resultado = document.getElementById('resultado');
         const btnCopiar = document.getElementById('btnCopiar');
         
-        // Drag and drop
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
@@ -166,9 +150,7 @@
             e.preventDefault();
             uploadArea.classList.remove('dragover');
             const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) {
-                carregarImagem(file);
-            }
+            if (file && file.type.startsWith('image/')) carregarImagem(file);
         });
         
         fileInput.addEventListener('change', (e) => {
@@ -190,56 +172,98 @@
             reader.readAsDataURL(file);
         }
         
+        // Pré-processa a imagem pra melhorar OCR
+        function processarImagem(img) {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            // Desenha imagem original
+            ctx.drawImage(img, 0, 0);
+            
+            // Pega os pixels
+            let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let data = imageData.data;
+            
+            // Converte pra preto e branco com threshold alto
+            for (let i = 0; i < data.length; i += 4) {
+                let r = data[i];
+                let g = data[i + 1];
+                let b = data[i + 2];
+                
+                // Calcula brilho
+                let brilho = (r + g + b) / 3;
+                
+                // Se for claro = branco, se for escuro = preto
+                let cor = brilho > 140? 255 : 0;
+                
+                data[i] = cor;
+                data[i + 1] = cor;
+                data[i + 2] = cor;
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
         async function extrairNumeros() {
             if (!imagemCarregada) return;
             
             btnExtrair.disabled = true;
             btnExtrair.innerText = '⏳ Processando...';
             status.className = 'carregando';
-            status.innerText = 'Lendo a imagem... Isso pode demorar 5-15 segundos';
-            resultado.style.display = 'none';
-            btnCopiar.style.display = 'none';
+            status.innerText = 'Pré-processando imagem...';
             
-            try {
-                const { data: { text } } = await Tesseract.recognize(
-                    imagemCarregada,
-                    'por',
-                    {
-                        logger: m => {
-                            if (m.status === 'recognizing text') {
-                                status.innerText = `Lendo... ${Math.round(m.progress * 100)}%`;
-                            }
+            const img = new Image();
+            img.onload = async () => {
+                try {
+                    // Pré-processa: converte pra P&B com alto contraste
+                    const canvasProcessado = processarImagem(img);
+                    
+                    status.innerText = 'Lendo números... 0%';
+                    
+                    const { data: { text } } = await Tesseract.recognize(
+                        canvasProcessado,
+                        'eng', // inglês lê número melhor
+                        {
+                            logger: m => {
+                                if (m.status === 'recognizing text') {
+                                    status.innerText = `Lendo... ${Math.round(m.progress * 100)}%`;
+                                }
+                            },
+                            tessedit_char_whitelist: '0123456789', // só números
+                            tessedit_pageseg_mode: '6' // modo de bloco único
                         }
+                    );
+                    
+                    // Extrai só números de 2 dígitos
+                    const numeros = text.match(/\d{2}/g);
+                    
+                    if (!numeros || numeros.length === 0) {
+                        status.className = 'erro';
+                        status.innerText = '❌ Nenhum número encontrado. Tenta printar a tela mais de perto.';
+                        btnExtrair.disabled = false;
+                        btnExtrair.innerText = '🔍 Extrair Números';
+                        return;
                     }
-                );
-                
-                // Extrai só números
-                const numeros = text.match(/\d+/g);
-                
-                if (!numeros || numeros.length === 0) {
+                    
+                    numerosExtraidos = numeros.join(', ');
+                    resultado.innerText = numerosExtraidos;
+                    resultado.style.display = 'block';
+                    btnCopiar.style.display = 'block';
+                    
+                    status.className = 'sucesso';
+                    status.innerText = `✅ ${numeros.length} números encontrados!`;
+                    
+                } catch (error) {
                     status.className = 'erro';
-                    status.innerText = '❌ Nenhum número encontrado na imagem';
-                    btnExtrair.disabled = false;
-                    btnExtrair.innerText = '🔍 Extrair Números';
-                    return;
+                    status.innerText = '❌ Erro ao processar. Tenta um print mais nítido.';
+                    console.error(error);
                 }
                 
-                numerosExtraidos = numeros.join(', ');
-                resultado.innerText = numerosExtraidos;
-                resultado.style.display = 'block';
-                btnCopiar.style.display = 'block';
-                
-                status.className = 'sucesso';
-                status.innerText = `✅ ${numeros.length} números encontrados!`;
-                
-            } catch (error) {
-                status.className = 'erro';
-                status.innerText = '❌ Erro ao processar imagem. Tenta uma foto mais nítida.';
-                console.error(error);
-            }
-            
-            btnExtrair.disabled = false;
-            btnExtrair.innerText = '🔍 Extrair Números';
+                btnExtrair.disabled = false;
+                btnExtrair.innerText = '🔍 Extrair Números';
+            };
+            img.src = imagemCarregada;
         }
         
         function copiar() {
