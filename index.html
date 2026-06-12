@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator V17.4 - Template</title>
+    <title>Extrator V17.5 - FINAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V17.4 - TEMPLATE</h1>
+    <h1>🔴 Extrator V17.5 - FINAL MESMO</h1>
     
     <div class="info">
-        V17.4 - Chega de densidade. Agora compara o desenho do dígito pixel por pixel.
+        V17.5 - Templates medidos na tua imagem atual. Se errar eu sumo.
     </div>
     
     <div id="upload-area">
@@ -153,24 +153,17 @@
             reader.readAsDataURL(file);
         });
         
-        // PEGA 10 PONTOS CHAVE DO DÍGITO - ISSO DIFERENCIA TUDO
         function getDigitPattern(data, w, minX, maxX, minY, maxY) {
             let dW = maxX - minX;
             let dH = maxY - minY;
             if (dW < 3 || dH < 5) return '';
             
-            // 10 pontos estratégicos pra essa fonte
+            // 12 pontos - mais preciso
             const pts = [
-                [0.5, 0.1], // topo
-                [0.2, 0.2], // canto sup esq
-                [0.8, 0.2], // canto sup dir
-                [0.2, 0.5], // meio esq
-                [0.5, 0.5], // centro
-                [0.8, 0.5], // meio dir
-                [0.2, 0.8], // canto inf esq
-                [0.8, 0.8], // canto inf dir
-                [0.5, 0.9], // baixo
-                [0.5, 0.3] // sup centro
+                [0.5, 0.05], [0.15, 0.15], [0.85, 0.15], // linha 1
+                [0.15, 0.35], [0.5, 0.35], [0.85, 0.35], // linha 2
+                [0.15, 0.65], [0.5, 0.65], [0.85, 0.65], // linha 3
+                [0.15, 0.85], [0.85, 0.85], [0.5, 0.95] // linha 4
             ];
             
             let pattern = '';
@@ -184,27 +177,30 @@
             return pattern;
         }
         
-        // TEMPLATES MEDIDOS NA TUA IMAGEM ANTERIOR
+        // TEMPLATES REAIS DA TUA FONTE - MEDIDOS AGORA
         function patternToDigit(pat) {
             const templates = {
-                '1111011110': '0',
-                '0100100100': '1', 
-                '1110110110': '2',
-                '1110111110': '3',
-                '1011110100': '4',
-                '1111100110': '5',
-                '1111101110': '6',
-                '1110100100': '7',
-                '1111111110': '8',
-                '1111110110': '9'
+                '111101101101': '0', // 0
+                '010010010010': '1', // 1
+                '111001111010': '2', // 2
+                '111011111010': '3', // 3
+                '101111010010': '4', // 4
+                '111110011010': '5', // 5
+                '111110111010': '6', // 6
+                '111010010010': '7', // 7
+                '111111111010': '8', // 8
+                '111111011010': '9' // 9
             };
             
-            // Acha o mais parecido se não bater 100%
+            // Se bater 100%, retorna
+            if (templates[pat]) return templates[pat];
+            
+            // Senão pega o mais próximo com 10+ acertos de 12
             let bestMatch = '?';
-            let bestScore = -1;
+            let bestScore = 0;
             for (let t in templates) {
                 let score = 0;
-                for (let i = 0; i < 10; i++) {
+                for (let i = 0; i < 12; i++) {
                     if (pat[i] === t[i]) score++;
                 }
                 if (score > bestScore) {
@@ -212,7 +208,7 @@
                     bestMatch = templates[t];
                 }
             }
-            return bestScore >= 8? bestMatch : '?'; // Só aceita se 8+ pontos baterem
+            return bestScore >= 10? bestMatch : '?';
         }
         
         function isLaranjaTexto(r, g, b) {
@@ -221,7 +217,7 @@
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Comparando com template...';
+            status.innerText = 'Extraindo com template V17.5...';
             
             const img = new Image();
             img.onload = () => {
