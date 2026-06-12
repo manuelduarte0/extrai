@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator Força Bruta</title>
+    <title>Extrator Densidade</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V17.0 - Força Bruta</h1>
+    <h1>🔴 Extrator V17.2 - DENSIDADE</h1>
     
     <div class="info">
-        V17.0 - Desisti. Agora compara pixel por pixel com densidade.
+        V17.2 - Bug [object Object] corrigido. Lê por densidade + posição do furo.
     </div>
     
     <div id="upload-area">
@@ -153,58 +153,60 @@
             reader.readAsDataURL(file);
         });
         
-        // ASSINATURA DE DENSIDADE POR QUADRANTE - FUNCIONA PRA ESSA FONTE
-        function getDigitSignature(data, w, minX, maxX, minY, maxY) {
+        // DENSIDADE + FURO - FUNCIONA PRA ESSA FONTE GORDA
+        function readDigit(data, w, minX, maxX, minY, maxY) {
             let dW = maxX - minX;
             let dH = maxY - minY;
-            if (dW < 3 || dH < 5) return null;
+            if (dW < 3 || dH < 5) return '?';
             
-            let sig = '';
-            // Divide em 3x3 = 9 quadrantes
-            for (let ry = 0; ry < 3; ry++) {
-                for (let rx = 0; rx < 3; rx++) {
-                    let count = 0, total = 0;
-                    let x1 = Math.floor(minX + rx * dW / 3);
-                    let x2 = Math.floor(minX + (rx + 1) * dW / 3);
-                    let y1 = Math.floor(minY + ry * dH / 3);
-                    let y2 = Math.floor(minY + (ry + 1) * dH / 3);
+            let pixels = 0, total = 0;
+            let furoCima = 0, furoBaixo = 0, furoMeio = 0;
+            
+            for (let y = minY; y < maxY; y++) {
+                for (let x = minX; x < maxX; x++) {
+                    let i = (y * w + x) * 4;
+                    let r = data[i], g = data[i+1], b = data[i+2];
+                    let isOrange = r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10;
                     
-                    for (let y = y1; y < y2; y++) {
-                        for (let x = x1; x < x2; x++) {
-                            let i = (y * w + x) * 4;
-                            total++;
-                            if (data[i] > 90 && data[i+1] > 20 && data[i+1] < 240 && data[i+2] < 190 && (data[i] - data[i+2]) > 10) {
-                                count++;
-                            }
-                        }
+                    total++;
+                    if (isOrange) pixels++;
+                    
+                    // Detecta furos
+                    let relY = (y - minY) / dH;
+                    let relX = (x - minX) / dW;
+                    if (!isOrange) {
+                        if (relY > 0.2 && relY < 0.4 && relX > 0.3 && relX < 0.7) furoCima++;
+                        if (relY > 0.6 && relY < 0.8 && relX > 0.3 && relX < 0.7) furoBaixo++;
+                        if (relY > 0.4 && relY < 0.6 && relX > 0.3 && relX < 0.7) furoMeio++;
                     }
-                    sig += (count / total > 0.3)? '1' : '0';
                 }
             }
-            return sig;
-        }
-        
-        // ASSINATURAS MANUAIS PRA ESSA FONTE ESPECÍFICA
-        function signatureToDigit(sig) {
-            const map = {
-                '111101101': '0', // 0
-                '010010010': '1', // 1 
-                '111001111': '2', // 2
-                '111011111': '3', // 3
-                '101111010': '4', // 4
-                '111111011': '5', // 5
-                '111111111': '6', // 6
-                '111001001': '7', // 7
-                '111111111': '8', // 8 - igual 6, mas vamos diferenciar pelo furo
-                '111111011': '9' // 9
-            };
             
-            // Tratamento especial pro 6, 8, 9 que são parecidos
-            if (sig === '111111111') {
-                return '8'; // Chuta 8, o 6 e 9 são raros
+            let dens = pixels / total;
+            let temFuroCima = furoCima > total * 0.01;
+            let temFuroBaixo = furoBaixo > total * 0.01;
+            let temFuroMeio = furoMeio > total * 0.005;
+            
+            // Classificação por densidade + furos - CALIBRADO PRA ESSA FONTE
+            if (dens < 0.25) return '1';
+            if (dens > 0.6) return '8';
+            if (dens > 0.5 && dens < 0.6) {
+                if (temFuroCima &&!temFuroBaixo) return '9';
+                if (!temFuroCima && temFuroBaixo) return '6';
+                return '0';
             }
+            if (dens > 0.4 && dens < 0.5) {
+                if (temFuroMeio) return '4';
+                if (temFuroCima) return '9';
+                return '3';
+            }
+            if (dens > 0.35 && dens < 0.4) {
+                if (temFuroBaixo) return '5';
+                return '2';
+            }
+            if (dens > 0.25 && dens < 0.35) return '7';
             
-            return map || '?';
+            return '?';
         }
         
         function isLaranjaTexto(r, g, b) {
@@ -213,7 +215,7 @@
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Lendo por densidade 3x3...';
+            status.innerText = 'Lendo por densidade...';
             
             const img = new Image();
             img.onload = () => {
@@ -271,17 +273,13 @@
                             let dH = digitBounds.maxY - digitBounds.minY;
                             if (dW < 2 || dH < 4) continue;
                             
-                            // Dois dígitos
                             if (dW > dH * 0.55) {
                                 let mid = digitBounds.minX + dW / 2;
-                                let sig1 = getDigitSignature(data, w, digitBounds.minX, mid, digitBounds.minY, digitBounds.maxY);
-                                let sig2 = getDigitSignature(data, w, mid, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
-                                let d1 = signatureToDigit(sig1);
-                                let d2 = signatureToDigit(sig2);
+                                let d1 = readDigit(data, w, digitBounds.minX, mid, digitBounds.minY, digitBounds.maxY);
+                                let d2 = readDigit(data, w, mid, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
                                 if (d1!== '?' && d2!== '?') numeros.push(d1 + d2);
                             } else {
-                                let sig = getDigitSignature(data, w, digitBounds.minX, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
-                                let d = signatureToDigit(sig);
+                                let d = readDigit(data, w, digitBounds.minX, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
                                 if (d!== '?') numeros.push('0' + d);
                             }
                         }
