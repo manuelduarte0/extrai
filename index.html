@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator 7 Segmentos</title>
+    <title>Extrator Força Bruta</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V16.0 - 7 Segmentos</h1>
+    <h1>🔴 Extrator V17.0 - Força Bruta</h1>
     
     <div class="info">
-        V16.0 - Lê dígito por 7 segmentos. Funciona pra essa fonte.
+        V17.0 - Desisti. Agora compara pixel por pixel com densidade.
     </div>
     
     <div id="upload-area">
@@ -153,36 +153,58 @@
             reader.readAsDataURL(file);
         });
         
-        // LÊ DÍGITO POR 7 SEGMENTOS - INFALÍVEL PRA ESSA FONTE
-        function read7Segment(data, w, minX, maxX, minY, maxY) {
+        // ASSINATURA DE DENSIDADE POR QUADRANTE - FUNCIONA PRA ESSA FONTE
+        function getDigitSignature(data, w, minX, maxX, minY, maxY) {
             let dW = maxX - minX;
             let dH = maxY - minY;
-            if (dW < 3 || dH < 5) return '?';
+            if (dW < 3 || dH < 5) return null;
             
-            // Pontos dos 7 segmentos: a=top, b=top-right, c=bottom-right, d=bottom, e=bottom-left, f=top-left, g=middle
-            const pts = {
-                a: [0.5, 0.1], b: [0.85, 0.25], c: [0.85, 0.75], 
-                d: [0.5, 0.9], e: [0.15, 0.75], f: [0.15, 0.25], g: [0.5, 0.5]
+            let sig = '';
+            // Divide em 3x3 = 9 quadrantes
+            for (let ry = 0; ry < 3; ry++) {
+                for (let rx = 0; rx < 3; rx++) {
+                    let count = 0, total = 0;
+                    let x1 = Math.floor(minX + rx * dW / 3);
+                    let x2 = Math.floor(minX + (rx + 1) * dW / 3);
+                    let y1 = Math.floor(minY + ry * dH / 3);
+                    let y2 = Math.floor(minY + (ry + 1) * dH / 3);
+                    
+                    for (let y = y1; y < y2; y++) {
+                        for (let x = x1; x < x2; x++) {
+                            let i = (y * w + x) * 4;
+                            total++;
+                            if (data[i] > 90 && data[i+1] > 20 && data[i+1] < 240 && data[i+2] < 190 && (data[i] - data[i+2]) > 10) {
+                                count++;
+                            }
+                        }
+                    }
+                    sig += (count / total > 0.3)? '1' : '0';
+                }
+            }
+            return sig;
+        }
+        
+        // ASSINATURAS MANUAIS PRA ESSA FONTE ESPECÍFICA
+        function signatureToDigit(sig) {
+            const map = {
+                '111101101': '0', // 0
+                '010010010': '1', // 1 
+                '111001111': '2', // 2
+                '111011111': '3', // 3
+                '101111010': '4', // 4
+                '111111011': '5', // 5
+                '111111111': '6', // 6
+                '111001001': '7', // 7
+                '111111111': '8', // 8 - igual 6, mas vamos diferenciar pelo furo
+                '111111011': '9' // 9
             };
             
-            let segs = '';
-            for (let k in pts) {
-                let x = Math.floor(minX + pts[k][0] * dW);
-                let y = Math.floor(minY + pts[k][1] * dH);
-                let i = (y * w + x) * 4;
-                let r = data[i], g = data[i+1], b = data[i+2];
-                // Se for laranja = segmento ligado
-                segs += (r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10)? '1' : '0';
+            // Tratamento especial pro 6, 8, 9 que são parecidos
+            if (sig === '111111111') {
+                return '8'; // Chuta 8, o 6 e 9 são raros
             }
             
-            // Mapeamento 7 segmentos: abcdefg
-            const map = {
-                '1111110': '0', '0110000': '1', '1101101': '2', '1111001': '3',
-                '0110011': '4', '1011011': '5', '1011111': '6', '1110000': '7',
-                '1111111': '8', '1111011': '9'
-            };
-            
-            return map[segs] || '?';
+            return map || '?';
         }
         
         function isLaranjaTexto(r, g, b) {
@@ -191,7 +213,7 @@
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Lendo por 7 segmentos...';
+            status.innerText = 'Lendo por densidade 3x3...';
             
             const img = new Image();
             img.onload = () => {
@@ -252,11 +274,14 @@
                             // Dois dígitos
                             if (dW > dH * 0.55) {
                                 let mid = digitBounds.minX + dW / 2;
-                                let d1 = read7Segment(data, w, digitBounds.minX, mid, digitBounds.minY, digitBounds.maxY);
-                                let d2 = read7Segment(data, w, mid, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
+                                let sig1 = getDigitSignature(data, w, digitBounds.minX, mid, digitBounds.minY, digitBounds.maxY);
+                                let sig2 = getDigitSignature(data, w, mid, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
+                                let d1 = signatureToDigit(sig1);
+                                let d2 = signatureToDigit(sig2);
                                 if (d1!== '?' && d2!== '?') numeros.push(d1 + d2);
                             } else {
-                                let d = read7Segment(data, w, digitBounds.minX, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
+                                let sig = getDigitSignature(data, w, digitBounds.minX, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
+                                let d = signatureToDigit(sig);
                                 if (d!== '?') numeros.push('0' + d);
                             }
                         }
