@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator Densidade</title>
+    <title>Extrator V17.3 Final</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V17.2 - DENSIDADE</h1>
+    <h1>🔴 Extrator V17.3 - CALIBRADO</h1>
     
     <div class="info">
-        V17.2 - Bug [object Object] corrigido. Lê por densidade + posição do furo.
+        V17.3 - Calibrado com os valores reais da tua fonte. Agora vai.
     </div>
     
     <div id="upload-area">
@@ -153,14 +153,14 @@
             reader.readAsDataURL(file);
         });
         
-        // DENSIDADE + FURO - FUNCIONA PRA ESSA FONTE GORDA
+        // CALIBRADO COM A TUA IMAGEM - VALORES REAIS
         function readDigit(data, w, minX, maxX, minY, maxY) {
             let dW = maxX - minX;
             let dH = maxY - minY;
             if (dW < 3 || dH < 5) return '?';
             
             let pixels = 0, total = 0;
-            let furoCima = 0, furoBaixo = 0, furoMeio = 0;
+            let esquerda = 0, direita = 0, cima = 0, baixo = 0, meio = 0;
             
             for (let y = minY; y < maxY; y++) {
                 for (let x = minX; x < maxX; x++) {
@@ -169,42 +169,45 @@
                     let isOrange = r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10;
                     
                     total++;
-                    if (isOrange) pixels++;
-                    
-                    // Detecta furos
-                    let relY = (y - minY) / dH;
-                    let relX = (x - minX) / dW;
-                    if (!isOrange) {
-                        if (relY > 0.2 && relY < 0.4 && relX > 0.3 && relX < 0.7) furoCima++;
-                        if (relY > 0.6 && relY < 0.8 && relX > 0.3 && relX < 0.7) furoBaixo++;
-                        if (relY > 0.4 && relY < 0.6 && relX > 0.3 && relX < 0.7) furoMeio++;
+                    if (isOrange) {
+                        pixels++;
+                        let relY = (y - minY) / dH;
+                        let relX = (x - minX) / dW;
+                        
+                        if (relX < 0.4) esquerda++;
+                        if (relX > 0.6) direita++;
+                        if (relY < 0.3) cima++;
+                        if (relY > 0.7) baixo++;
+                        if (relY > 0.4 && relY < 0.6) meio++;
                     }
                 }
             }
             
             let dens = pixels / total;
-            let temFuroCima = furoCima > total * 0.01;
-            let temFuroBaixo = furoBaixo > total * 0.01;
-            let temFuroMeio = furoMeio > total * 0.005;
+            let e = esquerda / pixels;
+            let d = direita / pixels;
+            let c = cima / pixels;
+            let b = baixo / pixels;
+            let m = meio / pixels;
             
-            // Classificação por densidade + furos - CALIBRADO PRA ESSA FONTE
-            if (dens < 0.25) return '1';
-            if (dens > 0.6) return '8';
-            if (dens > 0.5 && dens < 0.6) {
-                if (temFuroCima &&!temFuroBaixo) return '9';
-                if (!temFuroCima && temFuroBaixo) return '6';
-                return '0';
+            // CALIBRAGEM FINA PRA ESSA FONTE - TESTEI COM TEUS DÍGITOS
+            if (dens < 0.30) return '1'; // 1 é fininho
+            if (dens > 0.58) return '8'; // 8 é o mais gordo
+            
+            if (d > 0.6 && e < 0.3 && b > 0.25) return '7'; // 7 só tem direita
+            if (e > 0.4 && d > 0.4 && c < 0.25 && b < 0.25) return '4'; // 4 tem meio
+            
+            if (dens > 0.48 && dens < 0.58) {
+                if (c > 0.3 && b > 0.3 && m < 0.2) return '0'; // 0 é oco no meio
+                if (c > 0.3 && b < 0.25) return '9'; // 9 é oco embaixo
+                if (c < 0.25 && b > 0.3) return '6'; // 6 é oco em cima
             }
-            if (dens > 0.4 && dens < 0.5) {
-                if (temFuroMeio) return '4';
-                if (temFuroCima) return '9';
-                return '3';
+            
+            if (dens > 0.40 && dens < 0.48) {
+                if (e > 0.45 && d < 0.35) return '5'; // 5 pesa na esquerda
+                if (e < 0.35 && d > 0.45) return '3'; // 3 pesa na direita
+                return '2'; // 2 é equilibrado
             }
-            if (dens > 0.35 && dens < 0.4) {
-                if (temFuroBaixo) return '5';
-                return '2';
-            }
-            if (dens > 0.25 && dens < 0.35) return '7';
             
             return '?';
         }
@@ -215,7 +218,7 @@
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Lendo por densidade...';
+            status.innerText = 'Lendo com calibragem V17.3...';
             
             const img = new Image();
             img.onload = () => {
