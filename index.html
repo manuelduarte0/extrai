@@ -3,88 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator V18.4 - FINAL MESMO</title>
+    <title>Extrator V18.6 - LARANJA/BRANCO</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: Arial, sans-serif;
-            background: #000;
-            color: #fff;
-            padding: 20px;
-            max-width: 800px;
-            margin: 0 auto;
-        }
+        body { font-family: Arial, sans-serif; background: #000; color: #fff; padding: 20px; max-width: 800px; margin: 0 auto; }
         h1 { text-align: center; margin-bottom: 20px; color: #ff0000; }
-        #upload-area {
-            background: #111;
-            border: 3px dashed #ff0000;
-            border-radius: 12px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            margin-bottom: 20px;
-        }
+        #upload-area { background: #111; border: 3px dashed #ff0000; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; margin-bottom: 20px; }
         #file-input { display: none; }
-        #preview {
-            max-width: 100%;
-            max-height: 300px;
-            margin: 20px auto;
-            display: none;
-            border-radius: 8px;
-            border: 2px solid #ff0000;
-        }
+        #preview { max-width: 100%; max-height: 300px; margin: 20px auto; display: none; border-radius: 8px; border: 2px solid #ff0000; }
         #canvas { display: none; }
-        button {
-            width: 100%;
-            padding: 18px;
-            font-size: 18px;
-            font-weight: bold;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            margin: 10px 0;
-        }
+        button { width: 100%; padding: 18px; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 8px; cursor: pointer; margin: 10px 0; }
         #btnExtrair { background: #ff0000; display: none; }
         #btnCopiar { background: #00aa00; display: none; }
-        #status {
-            text-align: center;
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 8px;
-            font-weight: bold;
-            display: none;
-        }
+        #status { text-align: center; padding: 15px; margin: 15px 0; border-radius: 8px; font-weight: bold; display: none; }
         #status.sucesso { background: #27ae60; display: block; }
         #status.erro { background: #e74c3c; display: block; }
         #status.info { background: #f39c12; color: #000; display: block; }
-        #resultado {
-            background: #111;
-            border: 2px solid #ff0000;
-            border-radius: 8px;
-            padding: 15px;
-            min-height: 100px;
-            font-size: 18px;
-            line-height: 1.8;
-            word-break: break-all;
-            display: none;
-            color: #ff0000;
-            font-weight: bold;
-        }
+        #resultado { background: #111; border: 2px solid #ff0000; border-radius: 8px; padding: 15px; min-height: 100px; font-size: 18px; line-height: 1.8; word-break: break-all; display: none; color: #ff0000; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V18.4 - AGORA VAI</h1>
-    
+    <h1>🔴 Extrator V18.6 - LARANJA/BRANCO</h1>
+
     <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
-        <div style="font-size: 18px; font-weight: bold;">Manda imagem só do grid laranja</div>
+        <div style="font-size: 18px; font-weight: bold;">Manda imagem do grid laranja</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Funciona com fundo laranja + círculo branco</div>
     </div>
-    
+
     <input type="file" id="file-input" accept="image/*">
     <img id="preview">
     <canvas id="canvas"></canvas>
-    
+
     <button id="btnExtrair">🔍 Extrair Números</button>
     <div id="status"></div>
     <div id="resultado"></div>
@@ -100,11 +50,11 @@
         const status = document.getElementById('status');
         const resultado = document.getElementById('resultado');
         const btnCopiar = document.getElementById('btnCopiar');
-        
+
         let numerosExtraidos = '';
-        
+
         uploadArea.addEventListener('click', () => fileInput.click());
-        
+
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -119,7 +69,8 @@
             };
             reader.readAsDataURL(file);
         });
-        
+
+        // AGORA DETECTA TEXTO ESCURO EM FUNDO CLARO
         function getDigitProfile(data, w, minX, maxX, minY, maxY) {
             let dW = maxX - minX;
             let dH = maxY - minY;
@@ -131,12 +82,14 @@
                     let y = Math.floor(minY + (row + 0.5) * dH / 7);
                     let i = (y * w + x) * 4;
                     let r = data[i], g = data[i+1], b = data[i+2];
-                    profile += (r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10)? '1' : '0';
+                    // Texto laranja é MAIS ESCURO que o branco do círculo
+                    let brilho = (r + g + b) / 3;
+                    profile += (brilho < 200 && r > g && r > b)? '1' : '0';
                 }
             }
             return profile;
         }
-        
+
         function profileToDigit(prof) {
             const templates = {
                 '01110100011000110001100011000101110': '0',
@@ -150,10 +103,9 @@
                 '01110100011000101110100011000101110': '8',
                 '01110100011000101111000010000101110': '9'
             };
-            
-            // CORRIGIDO: ERA if(templates) return templates; - BUG MORTAL
-            if (templates[prof]) return templates[prof];
-            
+
+            if (templates) return templates;
+
             let bestMatch = '?';
             let bestScore = 0;
             for (let t in templates) {
@@ -166,18 +118,21 @@
                     bestMatch = templates[t];
                 }
             }
-            return bestScore >= 28? bestMatch : '?';
+            return bestScore >= 25? bestMatch : '?';
         }
-        
-        function isLaranja(r, g, b) {
-            return r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10;
+
+        // Detecta pixel que NÃO é branco e NÃO é laranja de fundo
+        function isTexto(r, g, b) {
+            let brilho = (r + g + b) / 3;
+            // Não é branco do círculo e tem componente vermelho forte
+            return brilho < 220 && r > 70 && r > g && r > b + 5;
         }
-        
+
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
             status.innerText = 'Extraindo...';
             status.style.display = 'block';
-            
+
             const img = new Image();
             img.onload = () => {
                 let w = img.width;
@@ -191,20 +146,21 @@
                 let gridX = 4, gridY = 5;
                 let cellW = w / gridX;
                 let cellH = h / gridY;
-                
+
                 for (let row = 0; row < gridY; row++) {
                     for (let col = 0; col < gridX; col++) {
-                        let startX = Math.floor(col * cellW);
-                        let endX = Math.floor((col + 1) * cellW);
-                        let startY = Math.floor(row * cellH);
-                        let endY = Math.floor((row + 1) * cellH);
+                        let startX = Math.floor(col * cellW + cellW * 0.15);
+                        let endX = Math.floor((col + 1) * cellW - cellW * 0.15);
+                        let startY = Math.floor(row * cellH + cellH * 0.15);
+                        let endY = Math.floor((row + 1) * cellH - cellH * 0.15);
+
                         let temTexto = false;
                         let bounds = {minX: endX, maxX: startX, minY: endY, maxY: startY};
-                        
+
                         for (let y = startY; y < endY; y++) {
                             for (let x = startX; x < endX; x++) {
                                 let i = (y * w + x) * 4;
-                                if (isLaranja(data[i], data[i+1], data[i+2])) {
+                                if (isTexto(data[i], data[i+1], data[i+2])) {
                                     temTexto = true;
                                     bounds.minX = Math.min(bounds.minX, x);
                                     bounds.maxX = Math.max(bounds.maxX, x);
@@ -213,12 +169,13 @@
                                 }
                             }
                         }
-                        
+
                         if (temTexto) {
                             let dW = bounds.maxX - bounds.minX;
                             let dH = bounds.maxY - bounds.minY;
                             if (dW < 2 || dH < 4) continue;
-                            if (dW > dH * 0.55) {
+
+                            if (dW > dH * 0.45) {
                                 let mid = bounds.minX + dW / 2;
                                 let p1 = getDigitProfile(data, w, bounds.minX, mid, bounds.minY, bounds.maxY);
                                 let p2 = getDigitProfile(data, w, mid, bounds.maxX, bounds.minY, bounds.maxY);
@@ -233,13 +190,13 @@
                         }
                     }
                 }
-                
+
                 if (numeros.length === 0) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não achei números laranja';
+                    status.innerText = '❌ Não achei números. Tenta recortar mais justo no grid.';
                     return;
                 }
-                
+
                 numerosExtraidos = numeros.sort((a,b) => parseInt(a) - parseInt(b)).join(', ');
                 resultado.innerText = numerosExtraidos;
                 resultado.style.display = 'block';
@@ -249,7 +206,7 @@
             };
             img.src = preview.src;
         });
-        
+
         btnCopiar.addEventListener('click', () => {
             navigator.clipboard.writeText(numerosExtraidos);
             btnCopiar.innerText = '✅ Copiado!';
