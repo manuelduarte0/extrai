@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator Grid Fixo</title>
+    <title>Extrator Cropado</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -83,7 +83,7 @@
             font-weight: bold;
         }
         
-     .info {
+    .info {
             background: #111;
             padding: 12px;
             border-radius: 8px;
@@ -95,16 +95,16 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V15.1 - Grid Fixo</h1>
+    <h1>🔴 Extrator V15.3 - Imagem Cropada</h1>
     
     <div class="info">
-        V15.1 - Bug do [object Object] corrigido. Margem do grid ajustada.
+        V15.3 - Pra imagem já recortada igual essa. Zero detecção de retângulo. Divide direto em 4x5.
     </div>
     
     <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
-        <div style="font-size: 18px; font-weight: bold;">Manda print da tela inteira</div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Grid 4x5 fixo no fundo laranja</div>
+        <div style="font-size: 18px; font-weight: bold;">Manda imagem só do grid laranja</div>
+        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Recorta igual a imagem que tu mandou</div>
     </div>
     
     <input type="file" id="file-input" accept="image/*">
@@ -153,7 +153,7 @@
             reader.readAsDataURL(file);
         });
         
-        // CORRIGIDO: agora retorna o dígito certo
+        // CORRIGIDO: bestMatch = templates
         function matchDigit(pattern) {
             const templates = {
                 '01110100011000101110': '0',
@@ -165,124 +165,84 @@
                 '01110100001111010111': '6',
                 '11100010001000100010': '7',
                 '01110101001110101110': '8',
-                '01110101001110001110': '9',
-                '0111010001100010111': '0',
-                '0100010001000100010': '1'
+                '01110101001110001110': '9'
             };
             
             let bestMatch = '?';
             let bestScore = 0;
             for (let tmpl in templates) {
                 let len = Math.min(tmpl.length, pattern.length);
-                if (len < 12) continue;
+                if (len < 10) continue;
                 let score = 0;
                 for (let i = 0; i < len; i++) {
                     if (pattern[i] === tmpl[i]) score++;
                 }
                 score = score / len;
-                if (score > bestScore && score >= 0.6) {
+                if (score > bestScore && score >= 0.55) {
                     bestScore = score;
-                    bestMatch = templates[tmpl]; // CORRIGIDO AQUI
+                    bestMatch = templates; // CORRIGIDO
                 }
             }
             return bestMatch;
         }
         
         function isLaranjaTexto(r, g, b) {
-            return r > 120 && g > 40 && g < 210 && b < 160 && (r - g) > 5 && (r - b) > 30;
-        }
-        
-        function isLaranjaFundo(r, g, b) {
-            return r > 170 && g > 70 && g < 170 && b < 110;
+            return r > 100 && g > 20 && g < 230 && b < 180 && (r - g) > -10 && (r - b) > 15;
         }
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Procurando retângulo laranja...';
+            status.innerText = 'Dividindo imagem em grid 4x5...';
             
             const img = new Image();
             img.onload = () => {
-                canvas.width = img.width;
-                canvas.height = img.height;
+                let w = img.width;
+                let h = img.height;
+                
+                canvas.width = w;
+                canvas.height = h;
                 ctx.drawImage(img, 0, 0);
-                let imgData = ctx.getImageData(0, 0, img.width, img.height);
+                let imgData = ctx.getImageData(0, 0, w, h);
                 let data = imgData.data;
                 
-                // 1. Acha o maior retângulo laranja de fundo
-                let minX = img.width, maxX = 0, minY = img.height, maxY = 0;
-                let achouFundo = false;
-                
-                for (let y = 0; y < img.height; y++) {
-                    for (let x = 0; x < img.width; x++) {
-                        let i = (y * img.width + x) * 4;
-                        let r = data[i], g = data[i+1], b = data[i+2];
-                        if (isLaranjaFundo(r, g, b)) {
-                            achouFundo = true;
-                            minX = Math.min(minX, x);
-                            maxX = Math.max(maxX, x);
-                            minY = Math.min(minY, y);
-                            maxY = Math.max(maxY, y);
-                        }
-                    }
-                }
-                
-                if (!achouFundo) {
-                    status.className = 'erro';
-                    status.innerText = '❌ Não achei fundo laranja na imagem';
-                    return;
-                }
-                
-                let rectW = maxX - minX;
-                let rectH = maxY - minY;
-                
-                if (rectW < 200 || rectH < 200) {
-                    status.className = 'erro';
-                    status.innerText = '❌ Retângulo laranja muito pequeno';
-                    return;
-                }
-                
-                status.className = 'info';
-                status.innerText = 'Dividindo em grid 4x5 e lendo...';
-                
-                // 2. Processa visual
-                canvasProcessada.width = rectW;
-                canvasProcessada.height = rectH;
-                let outputData = ctxProc.createImageData(rectW, rectH);
+                // Assume que a imagem inteira é o grid
+                canvasProcessada.width = w;
+                canvasProcessada.height = h;
+                let outputData = ctxProc.createImageData(w, h);
                 let out = outputData.data;
                 
                 let numeros = [];
                 let gridX = 4, gridY = 5;
-                let cellW = rectW / gridX;
-                let cellH = rectH / gridY;
+                let cellW = w / gridX;
+                let cellH = h / gridY;
                 
-                // CORRIGIDO: margem menor, de 8% só
+                // Margem mínima de 2% porque a imagem tá cropada certinha
                 for (let row = 0; row < gridY; row++) {
                     for (let col = 0; col < gridX; col++) {
-                        let startX = Math.floor(minX + col * cellW + cellW * 0.08);
-                        let endX = Math.floor(minX + (col + 1) * cellW - cellW * 0.08);
-                        let startY = Math.floor(minY + row * cellH + cellH * 0.08);
-                        let endY = Math.floor(minY + (row + 1) * cellH - cellH * 0.08);
+                        let startX = Math.floor(col * cellW + cellW * 0.02);
+                        let endX = Math.floor((col + 1) * cellW - cellW * 0.02);
+                        let startY = Math.floor(row * cellH + cellH * 0.02);
+                        let endY = Math.floor((row + 1) * cellH - cellH * 0.02);
                         
                         let temTexto = false;
                         let digitBounds = {minX: endX, maxX: startX, minY: endY, maxY: startY};
                         
                         for (let y = startY; y < endY; y++) {
                             for (let x = startX; x < endX; x++) {
-                                let i = (y * img.width + x) * 4;
-                                let oi = ((y - minY) * rectW + (x - minX)) * 4;
+                                let i = (y * w + x) * 4;
                                 let r = data[i], g = data[i+1], b = data[i+2];
                                 
                                 if (isLaranjaTexto(r, g, b)) {
                                     temTexto = true;
-                                    out[oi] = 255; out[oi+1] = 0; out[oi+2] = 0; out[oi+3] = 255;
+                                    out[i] = 255; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
                                     digitBounds.minX = Math.min(digitBounds.minX, x);
                                     digitBounds.maxX = Math.max(digitBounds.maxX, x);
                                     digitBounds.minY = Math.min(digitBounds.minY, y);
                                     digitBounds.maxY = Math.max(digitBounds.maxY, y);
                                 } else if (r > 180 && g > 180 && b > 180) {
-                                    out[oi] = 255; out[oi+1] = 255; out[oi+2] = 255; out[oi+3] = 255;
+                                    out[i] = 255; out[i+1] = 255; out[i+2] = 255; out[i+3] = 255;
                                 } else {
-                                    out[oi] = 0; out[oi+1] = 0; out[oi+2] = 0; out[oi+3] = 255;
+                                    out[i] = 0; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
                                 }
                             }
                         }
@@ -292,15 +252,15 @@
                             let dH = digitBounds.maxY - digitBounds.minY;
                             if (dW < 3 || dH < 5) continue;
                             
-                            if (dW > dH * 0.6) {
+                            if (dW > dH * 0.55) {
                                 let p1 = '', p2 = '';
                                 for (let r = 0; r < 5; r++) {
                                     for (let c = 0; c < 5; c++) {
                                         let px1 = Math.floor(digitBounds.minX + c * dW / 10);
                                         let px2 = Math.floor(digitBounds.minX + dW/2 + c * dW / 10);
                                         let py = Math.floor(digitBounds.minY + r * dH / 5);
-                                        let i1 = (py * img.width + px1) * 4;
-                                        let i2 = (py * img.width + px2) * 4;
+                                        let i1 = (py * w + px1) * 4;
+                                        let i2 = (py * w + px2) * 4;
                                         p1 += isLaranjaTexto(data[i1], data[i1+1], data[i1+2])? '1' : '0';
                                         p2 += isLaranjaTexto(data[i2], data[i2+1], data[i2+2])? '1' : '0';
                                     }
@@ -314,7 +274,7 @@
                                     for (let c = 0; c < 5; c++) {
                                         let px = Math.floor(digitBounds.minX + c * dW / 5);
                                         let py = Math.floor(digitBounds.minY + r * dH / 5);
-                                        let i = (py * img.width + px) * 4;
+                                        let i = (py * w + px) * 4;
                                         pattern += isLaranjaTexto(data[i], data[i+1], data[i+2])? '1' : '0';
                                     }
                                 }
@@ -330,7 +290,7 @@
                 
                 if (numeros.length === 0) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não achei números laranja no grid';
+                    status.innerText = '❌ Não achei números laranja';
                     return;
                 }
                 
