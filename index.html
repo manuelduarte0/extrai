@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator Cropado</title>
+    <title>Extrator 7 Segmentos</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V15.6 - Final</h1>
+    <h1>🔴 Extrator V16.0 - 7 Segmentos</h1>
     
     <div class="info">
-        V15.6 - LINHA 155 CORRIGIDA: templates
+        V16.0 - Lê dígito por 7 segmentos. Funciona pra essa fonte.
     </div>
     
     <div id="upload-area">
@@ -153,37 +153,36 @@
             reader.readAsDataURL(file);
         });
         
-        // LINHA 155 - ÚNICA MUDANÇA - AGORA TÁ CERTO
-        function matchDigit(pattern) {
-            const templates = {
-                '01110100011000101110': '0',
-                '00100010001000100010': '1', 
-                '111000010011100010111': '2',
-                '111000010011100001111': '3',
-                '1001010010111100100': '4',
-                '111101000011100001111': '5',
-                '01110100001111010111': '6',
-                '11100010001000100010': '7',
-                '01110101001110101110': '8',
-                '01110101001110001110': '9'
+        // LÊ DÍGITO POR 7 SEGMENTOS - INFALÍVEL PRA ESSA FONTE
+        function read7Segment(data, w, minX, maxX, minY, maxY) {
+            let dW = maxX - minX;
+            let dH = maxY - minY;
+            if (dW < 3 || dH < 5) return '?';
+            
+            // Pontos dos 7 segmentos: a=top, b=top-right, c=bottom-right, d=bottom, e=bottom-left, f=top-left, g=middle
+            const pts = {
+                a: [0.5, 0.1], b: [0.85, 0.25], c: [0.85, 0.75], 
+                d: [0.5, 0.9], e: [0.15, 0.75], f: [0.15, 0.25], g: [0.5, 0.5]
             };
             
-            let bestMatch = '?';
-            let bestScore = 0;
-            for (let tmpl in templates) {
-                let len = Math.min(tmpl.length, pattern.length);
-                if (len < 10) continue;
-                let score = 0;
-                for (let i = 0; i < len; i++) {
-                    if (pattern[i] === tmpl[i]) score++;
-                }
-                score = score / len;
-                if (score > bestScore && score >= 0.5) {
-                    bestScore = score;
-                    bestMatch = templates[tmpl]; // <<<< LINHA 155 CORRIGIDA
-                }
+            let segs = '';
+            for (let k in pts) {
+                let x = Math.floor(minX + pts[k][0] * dW);
+                let y = Math.floor(minY + pts[k][1] * dH);
+                let i = (y * w + x) * 4;
+                let r = data[i], g = data[i+1], b = data[i+2];
+                // Se for laranja = segmento ligado
+                segs += (r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10)? '1' : '0';
             }
-            return bestMatch;
+            
+            // Mapeamento 7 segmentos: abcdefg
+            const map = {
+                '1111110': '0', '0110000': '1', '1101101': '2', '1111001': '3',
+                '0110011': '4', '1011011': '5', '1011111': '6', '1110000': '7',
+                '1111111': '8', '1111011': '9'
+            };
+            
+            return map[segs] || '?';
         }
         
         function isLaranjaTexto(r, g, b) {
@@ -192,7 +191,7 @@
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Dividindo em grid 4x5...';
+            status.innerText = 'Lendo por 7 segmentos...';
             
             const img = new Image();
             img.onload = () => {
@@ -250,33 +249,14 @@
                             let dH = digitBounds.maxY - digitBounds.minY;
                             if (dW < 2 || dH < 4) continue;
                             
-                            if (dW > dH * 0.5) {
-                                let p1 = '', p2 = '';
-                                for (let r = 0; r < 5; r++) {
-                                    for (let c = 0; c < 5; c++) {
-                                        let px1 = Math.floor(digitBounds.minX + c * dW / 10);
-                                        let px2 = Math.floor(digitBounds.minX + dW/2 + c * dW / 10);
-                                        let py = Math.floor(digitBounds.minY + r * dH / 5);
-                                        let i1 = (py * w + px1) * 4;
-                                        let i2 = (py * w + px2) * 4;
-                                        p1 += isLaranjaTexto(data[i1], data[i1+1], data[i1+2])? '1' : '0';
-                                        p2 += isLaranjaTexto(data[i2], data[i2+1], data[i2+2])? '1' : '0';
-                                    }
-                                }
-                                let d1 = matchDigit(p1);
-                                let d2 = matchDigit(p2);
+                            // Dois dígitos
+                            if (dW > dH * 0.55) {
+                                let mid = digitBounds.minX + dW / 2;
+                                let d1 = read7Segment(data, w, digitBounds.minX, mid, digitBounds.minY, digitBounds.maxY);
+                                let d2 = read7Segment(data, w, mid, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
                                 if (d1!== '?' && d2!== '?') numeros.push(d1 + d2);
                             } else {
-                                let pattern = '';
-                                for (let r = 0; r < 5; r++) {
-                                    for (let c = 0; c < 5; c++) {
-                                        let px = Math.floor(digitBounds.minX + c * dW / 5);
-                                        let py = Math.floor(digitBounds.minY + r * dH / 5);
-                                        let i = (py * w + px) * 4;
-                                        pattern += isLaranjaTexto(data[i], data[i+1], data[i+2])? '1' : '0';
-                                    }
-                                }
-                                let d = matchDigit(pattern);
+                                let d = read7Segment(data, w, digitBounds.minX, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
                                 if (d!== '?') numeros.push('0' + d);
                             }
                         }
