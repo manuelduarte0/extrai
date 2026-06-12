@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator V18.2 - SEM CDN</title>
+    <title>Extrator V18.3 - FINAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -15,7 +15,6 @@
             margin: 0 auto;
         }
         h1 { text-align: center; margin-bottom: 20px; color: #ff0000; }
-        
         #upload-area {
             background: #111;
             border: 3px dashed #ff0000;
@@ -35,7 +34,6 @@
             border: 2px solid #ff0000;
         }
         #canvas { display: none; }
-        
         button {
             width: 100%;
             padding: 18px;
@@ -49,7 +47,6 @@
         }
         #btnExtrair { background: #ff0000; display: none; }
         #btnCopiar { background: #00aa00; display: none; }
-        
         #status {
             text-align: center;
             padding: 15px;
@@ -61,7 +58,6 @@
         #status.sucesso { background: #27ae60; display: block; }
         #status.erro { background: #e74c3c; display: block; }
         #status.info { background: #f39c12; color: #000; display: block; }
-        
         #resultado {
             background: #111;
             border: 2px solid #ff0000;
@@ -75,29 +71,14 @@
             color: #ff0000;
             font-weight: bold;
         }
-        
-.info {
-            background: #111;
-            padding: 12px;
-            border-radius: 8px;
-            margin: 15px 0;
-            font-size: 14px;
-            text-align: center;
-            border: 1px solid #ff0000;
-        }
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V18.2 - SEM CDN</h1>
-    
-    <div class="info">
-        V18.2 - Roda 100% offline. Template medido na tua fonte. Clique funciona.
-    </div>
+    <h1>🔴 Extrator V18.3 - FINAL</h1>
     
     <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
         <div style="font-size: 18px; font-weight: bold;">Manda imagem só do grid laranja</div>
-        <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Recorta igual a imagem que tu mandou</div>
     </div>
     
     <input type="file" id="file-input" accept="image/*">
@@ -105,9 +86,7 @@
     <canvas id="canvas"></canvas>
     
     <button id="btnExtrair">🔍 Extrair Números</button>
-    
     <div id="status"></div>
-    
     <div id="resultado"></div>
     <button id="btnCopiar">📋 Copiar Números</button>
 
@@ -129,7 +108,6 @@
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
             const reader = new FileReader();
             reader.onload = (e) => {
                 preview.src = e.target.result;
@@ -142,14 +120,11 @@
             reader.readAsDataURL(file);
         });
         
-        // PEGA O PERFIL DO DÍGITO EM 5x7 - ISSO DIFERENCIA TUDO NESSA FONTE
         function getDigitProfile(data, w, minX, maxX, minY, maxY) {
             let dW = maxX - minX;
             let dH = maxY - minY;
             if (dW < 3 || dH < 5) return '';
-            
             let profile = '';
-            // Divide em 5 colunas x 7 linhas
             for (let row = 0; row < 7; row++) {
                 for (let col = 0; col < 5; col++) {
                     let x = Math.floor(minX + (col + 0.5) * dW / 5);
@@ -162,7 +137,6 @@
             return profile;
         }
         
-        // TEMPLATES 5x7 MEDIDOS NA TUA IMAGEM ATUAL - CADA DÍGITO
         function profileToDigit(prof) {
             const templates = {
                 '01110100011000110001100011000101110': '0',
@@ -176,10 +150,7 @@
                 '01110100011000101110100011000101110': '8',
                 '01110100011000101111000010000101110': '9'
             };
-            
-            if (templates[prof]) return templates[prof];
-            
-            // Se não bater 100%, pega o mais próximo com 30+ de 35
+            if (templates) return templates;
             let bestMatch = '?';
             let bestScore = 0;
             for (let t in templates) {
@@ -192,7 +163,7 @@
                     bestMatch = templates[t];
                 }
             }
-            return bestScore >= 30? bestMatch : '?';
+            return bestScore >= 28? bestMatch : '?';
         }
         
         function isLaranja(r, g, b) {
@@ -202,18 +173,17 @@
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
             status.innerText = 'Extraindo...';
+            status.style.display = 'block';
             
             const img = new Image();
             img.onload = () => {
                 let w = img.width;
                 let h = img.height;
-                
                 canvas.width = w;
                 canvas.height = h;
                 ctx.drawImage(img, 0, 0);
                 let imgData = ctx.getImageData(0, 0, w, h);
                 let data = imgData.data;
-                
                 let numeros = [];
                 let gridX = 4, gridY = 5;
                 let cellW = w / gridX;
@@ -225,7 +195,6 @@
                         let endX = Math.floor((col + 1) * cellW);
                         let startY = Math.floor(row * cellH);
                         let endY = Math.floor((row + 1) * cellH);
-                        
                         let temTexto = false;
                         let bounds = {minX: endX, maxX: startX, minY: endY, maxY: startY};
                         
@@ -246,7 +215,6 @@
                             let dW = bounds.maxX - bounds.minX;
                             let dH = bounds.maxY - bounds.minY;
                             if (dW < 2 || dH < 4) continue;
-                            
                             if (dW > dH * 0.55) {
                                 let mid = bounds.minX + dW / 2;
                                 let p1 = getDigitProfile(data, w, bounds.minX, mid, bounds.minY, bounds.maxY);
@@ -273,7 +241,6 @@
                 resultado.innerText = numerosExtraidos;
                 resultado.style.display = 'block';
                 btnCopiar.style.display = 'block';
-                
                 status.className = 'sucesso';
                 status.innerText = `✅ ${numeros.length} números extraídos!`;
             };
@@ -283,9 +250,7 @@
         btnCopiar.addEventListener('click', () => {
             navigator.clipboard.writeText(numerosExtraidos);
             btnCopiar.innerText = '✅ Copiado!';
-            setTimeout(() => {
-                btnCopiar.innerText = '📋 Copiar Números';
-            }, 2000);
+            setTimeout(() => { btnCopiar.innerText = '📋 Copiar Números'; }, 2000);
         });
     </script>
 </body>
