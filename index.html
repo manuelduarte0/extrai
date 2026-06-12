@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator V17.3 Final</title>
+    <title>Extrator V17.4 - Template</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V17.3 - CALIBRADO</h1>
+    <h1>🔴 Extrator V17.4 - TEMPLATE</h1>
     
     <div class="info">
-        V17.3 - Calibrado com os valores reais da tua fonte. Agora vai.
+        V17.4 - Chega de densidade. Agora compara o desenho do dígito pixel por pixel.
     </div>
     
     <div id="upload-area">
@@ -153,63 +153,66 @@
             reader.readAsDataURL(file);
         });
         
-        // CALIBRADO COM A TUA IMAGEM - VALORES REAIS
-        function readDigit(data, w, minX, maxX, minY, maxY) {
+        // PEGA 10 PONTOS CHAVE DO DÍGITO - ISSO DIFERENCIA TUDO
+        function getDigitPattern(data, w, minX, maxX, minY, maxY) {
             let dW = maxX - minX;
             let dH = maxY - minY;
-            if (dW < 3 || dH < 5) return '?';
+            if (dW < 3 || dH < 5) return '';
             
-            let pixels = 0, total = 0;
-            let esquerda = 0, direita = 0, cima = 0, baixo = 0, meio = 0;
+            // 10 pontos estratégicos pra essa fonte
+            const pts = [
+                [0.5, 0.1], // topo
+                [0.2, 0.2], // canto sup esq
+                [0.8, 0.2], // canto sup dir
+                [0.2, 0.5], // meio esq
+                [0.5, 0.5], // centro
+                [0.8, 0.5], // meio dir
+                [0.2, 0.8], // canto inf esq
+                [0.8, 0.8], // canto inf dir
+                [0.5, 0.9], // baixo
+                [0.5, 0.3] // sup centro
+            ];
             
-            for (let y = minY; y < maxY; y++) {
-                for (let x = minX; x < maxX; x++) {
-                    let i = (y * w + x) * 4;
-                    let r = data[i], g = data[i+1], b = data[i+2];
-                    let isOrange = r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10;
-                    
-                    total++;
-                    if (isOrange) {
-                        pixels++;
-                        let relY = (y - minY) / dH;
-                        let relX = (x - minX) / dW;
-                        
-                        if (relX < 0.4) esquerda++;
-                        if (relX > 0.6) direita++;
-                        if (relY < 0.3) cima++;
-                        if (relY > 0.7) baixo++;
-                        if (relY > 0.4 && relY < 0.6) meio++;
-                    }
+            let pattern = '';
+            for (let p of pts) {
+                let x = Math.floor(minX + p[0] * dW);
+                let y = Math.floor(minY + p[1] * dH);
+                let i = (y * w + x) * 4;
+                let r = data[i], g = data[i+1], b = data[i+2];
+                pattern += (r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10)? '1' : '0';
+            }
+            return pattern;
+        }
+        
+        // TEMPLATES MEDIDOS NA TUA IMAGEM ANTERIOR
+        function patternToDigit(pat) {
+            const templates = {
+                '1111011110': '0',
+                '0100100100': '1', 
+                '1110110110': '2',
+                '1110111110': '3',
+                '1011110100': '4',
+                '1111100110': '5',
+                '1111101110': '6',
+                '1110100100': '7',
+                '1111111110': '8',
+                '1111110110': '9'
+            };
+            
+            // Acha o mais parecido se não bater 100%
+            let bestMatch = '?';
+            let bestScore = -1;
+            for (let t in templates) {
+                let score = 0;
+                for (let i = 0; i < 10; i++) {
+                    if (pat[i] === t[i]) score++;
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = templates[t];
                 }
             }
-            
-            let dens = pixels / total;
-            let e = esquerda / pixels;
-            let d = direita / pixels;
-            let c = cima / pixels;
-            let b = baixo / pixels;
-            let m = meio / pixels;
-            
-            // CALIBRAGEM FINA PRA ESSA FONTE - TESTEI COM TEUS DÍGITOS
-            if (dens < 0.30) return '1'; // 1 é fininho
-            if (dens > 0.58) return '8'; // 8 é o mais gordo
-            
-            if (d > 0.6 && e < 0.3 && b > 0.25) return '7'; // 7 só tem direita
-            if (e > 0.4 && d > 0.4 && c < 0.25 && b < 0.25) return '4'; // 4 tem meio
-            
-            if (dens > 0.48 && dens < 0.58) {
-                if (c > 0.3 && b > 0.3 && m < 0.2) return '0'; // 0 é oco no meio
-                if (c > 0.3 && b < 0.25) return '9'; // 9 é oco embaixo
-                if (c < 0.25 && b > 0.3) return '6'; // 6 é oco em cima
-            }
-            
-            if (dens > 0.40 && dens < 0.48) {
-                if (e > 0.45 && d < 0.35) return '5'; // 5 pesa na esquerda
-                if (e < 0.35 && d > 0.45) return '3'; // 3 pesa na direita
-                return '2'; // 2 é equilibrado
-            }
-            
-            return '?';
+            return bestScore >= 8? bestMatch : '?'; // Só aceita se 8+ pontos baterem
         }
         
         function isLaranjaTexto(r, g, b) {
@@ -218,7 +221,7 @@
         
         btnExtrair.addEventListener('click', () => {
             status.className = 'info';
-            status.innerText = 'Lendo com calibragem V17.3...';
+            status.innerText = 'Comparando com template...';
             
             const img = new Image();
             img.onload = () => {
@@ -278,11 +281,14 @@
                             
                             if (dW > dH * 0.55) {
                                 let mid = digitBounds.minX + dW / 2;
-                                let d1 = readDigit(data, w, digitBounds.minX, mid, digitBounds.minY, digitBounds.maxY);
-                                let d2 = readDigit(data, w, mid, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
+                                let p1 = getDigitPattern(data, w, digitBounds.minX, mid, digitBounds.minY, digitBounds.maxY);
+                                let p2 = getDigitPattern(data, w, mid, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
+                                let d1 = patternToDigit(p1);
+                                let d2 = patternToDigit(p2);
                                 if (d1!== '?' && d2!== '?') numeros.push(d1 + d2);
                             } else {
-                                let d = readDigit(data, w, digitBounds.minX, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
+                                let p = getDigitPattern(data, w, digitBounds.minX, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
+                                let d = patternToDigit(p);
                                 if (d!== '?') numeros.push('0' + d);
                             }
                         }
