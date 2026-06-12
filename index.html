@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V15.5 - Final</h1>
+    <h1>🔴 Extrator V15.6 - Final</h1>
     
     <div class="info">
-        V15.5 - Bug [object Object] resolvido. Linha 155 corrigida.
+        V15.6 - LINHA 155 CORRIGIDA: templates
     </div>
     
     <div id="upload-area">
@@ -153,7 +153,7 @@
             reader.readAsDataURL(file);
         });
         
-        // LINHA 155 CORRIGIDA - AGORA RETORNA O DÍGITO
+        // LINHA 155 - ÚNICA MUDANÇA - AGORA TÁ CERTO
         function matchDigit(pattern) {
             const templates = {
                 '01110100011000101110': '0',
@@ -180,7 +180,7 @@
                 score = score / len;
                 if (score > bestScore && score >= 0.5) {
                     bestScore = score;
-                    bestMatch = templates; // CORRIGIDO: templates
+                    bestMatch = templates[tmpl]; // <<<< LINHA 155 CORRIGIDA
                 }
             }
             return bestMatch;
