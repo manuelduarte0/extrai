@@ -83,7 +83,7 @@
             font-weight: bold;
         }
         
-      .info {
+     .info {
             background: #111;
             padding: 12px;
             border-radius: 8px;
@@ -95,10 +95,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V15.0 - Grid Fixo</h1>
+    <h1>🔴 Extrator V15.1 - Grid Fixo</h1>
     
     <div class="info">
-        V15.0 - Acha retângulo laranja e divide em 4x5. Não tenta detectar círculo. Funciona 100%.
+        V15.1 - Bug do [object Object] corrigido. Margem do grid ajustada.
     </div>
     
     <div id="upload-area">
@@ -153,7 +153,7 @@
             reader.readAsDataURL(file);
         });
         
-        // Templates de dígitos com tolerância alta
+        // CORRIGIDO: agora retorna o dígito certo
         function matchDigit(pattern) {
             const templates = {
                 '01110100011000101110': '0',
@@ -182,19 +182,17 @@
                 score = score / len;
                 if (score > bestScore && score >= 0.6) {
                     bestScore = score;
-                    bestMatch = templates;
+                    bestMatch = templates[tmpl]; // CORRIGIDO AQUI
                 }
             }
             return bestMatch;
         }
         
         function isLaranjaTexto(r, g, b) {
-            // Laranja do texto: mais específico
             return r > 120 && g > 40 && g < 210 && b < 160 && (r - g) > 5 && (r - b) > 30;
         }
         
         function isLaranjaFundo(r, g, b) {
-            // Laranja do fundo da cartela
             return r > 170 && g > 70 && g < 170 && b < 110;
         }
         
@@ -237,10 +235,9 @@
                 let rectW = maxX - minX;
                 let rectH = maxY - minY;
                 
-                // Valida se tem tamanho de cartela
-                if (rectW < 200 || rectH < 200 || rectW/rectH < 0.5 || rectW/rectH > 1.5) {
+                if (rectW < 200 || rectH < 200) {
                     status.className = 'erro';
-                    status.innerText = '❌ Retângulo laranja muito pequeno ou desproporcional';
+                    status.innerText = '❌ Retângulo laranja muito pequeno';
                     return;
                 }
                 
@@ -258,12 +255,13 @@
                 let cellW = rectW / gridX;
                 let cellH = rectH / gridY;
                 
+                // CORRIGIDO: margem menor, de 8% só
                 for (let row = 0; row < gridY; row++) {
                     for (let col = 0; col < gridX; col++) {
-                        let startX = Math.floor(minX + col * cellW + cellW * 0.15);
-                        let endX = Math.floor(minX + (col + 1) * cellW - cellW * 0.15);
-                        let startY = Math.floor(minY + row * cellH + cellH * 0.15);
-                        let endY = Math.floor(minY + (row + 1) * cellH - cellH * 0.15);
+                        let startX = Math.floor(minX + col * cellW + cellW * 0.08);
+                        let endX = Math.floor(minX + (col + 1) * cellW - cellW * 0.08);
+                        let startY = Math.floor(minY + row * cellH + cellH * 0.08);
+                        let endY = Math.floor(minY + (row + 1) * cellH - cellH * 0.08);
                         
                         let temTexto = false;
                         let digitBounds = {minX: endX, maxX: startX, minY: endY, maxY: startY};
@@ -294,7 +292,6 @@
                             let dH = digitBounds.maxY - digitBounds.minY;
                             if (dW < 3 || dH < 5) continue;
                             
-                            // Dois dígitos
                             if (dW > dH * 0.6) {
                                 let p1 = '', p2 = '';
                                 for (let r = 0; r < 5; r++) {
@@ -343,7 +340,7 @@
                 btnCopiar.style.display = 'block';
                 
                 status.className = 'sucesso';
-                status.innerText = `✅ ${numeros.length} números extraídos do grid 4x5!`;
+                status.innerText = `✅ ${numeros.length} números extraídos!`;
             };
             img.src = preview.src;
         });
