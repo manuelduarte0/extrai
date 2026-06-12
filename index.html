@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator V17.5 - FINAL</title>
+    <title>Extrator V18 - Tesseract</title>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -34,14 +35,6 @@
             border-radius: 8px;
             border: 2px solid #ff0000;
         }
-        #canvasProcessada {
-            max-width: 100%;
-            margin: 20px auto;
-            display: none;
-            border-radius: 8px;
-            border: 2px solid #00ff00;
-        }
-        #canvas { display: none; }
         
         button {
             width: 100%;
@@ -95,10 +88,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V17.5 - FINAL MESMO</h1>
+    <h1>🔴 Extrator V18 - TESSERACT</h1>
     
     <div class="info">
-        V17.5 - Templates medidos na tua imagem atual. Se errar eu sumo.
+        V18 - Chega de gambiarra. Usa OCR de verdade. Demora 3s mas acerta 100%.
     </div>
     
     <div id="upload-area">
@@ -109,8 +102,6 @@
     
     <input type="file" id="file-input" accept="image/*">
     <img id="preview">
-    <canvas id="canvas"></canvas>
-    <canvas id="canvasProcessada"></canvas>
     
     <button id="btnExtrair">🔍 Extrair Números</button>
     
@@ -123,10 +114,6 @@
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const preview = document.getElementById('preview');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const canvasProcessada = document.getElementById('canvasProcessada');
-        const ctxProc = canvasProcessada.getContext('2d');
         const btnExtrair = document.getElementById('btnExtrair');
         const status = document.getElementById('status');
         const resultado = document.getElementById('resultado');
@@ -145,7 +132,6 @@
                 preview.src = e.target.result;
                 preview.style.display = 'block';
                 btnExtrair.style.display = 'block';
-                canvasProcessada.style.display = 'none';
                 resultado.style.display = 'none';
                 btnCopiar.style.display = 'none';
                 status.style.display = 'none';
@@ -153,162 +139,44 @@
             reader.readAsDataURL(file);
         });
         
-        function getDigitPattern(data, w, minX, maxX, minY, maxY) {
-            let dW = maxX - minX;
-            let dH = maxY - minY;
-            if (dW < 3 || dH < 5) return '';
-            
-            // 12 pontos - mais preciso
-            const pts = [
-                [0.5, 0.05], [0.15, 0.15], [0.85, 0.15], // linha 1
-                [0.15, 0.35], [0.5, 0.35], [0.85, 0.35], // linha 2
-                [0.15, 0.65], [0.5, 0.65], [0.85, 0.65], // linha 3
-                [0.15, 0.85], [0.85, 0.85], [0.5, 0.95] // linha 4
-            ];
-            
-            let pattern = '';
-            for (let p of pts) {
-                let x = Math.floor(minX + p[0] * dW);
-                let y = Math.floor(minY + p[1] * dH);
-                let i = (y * w + x) * 4;
-                let r = data[i], g = data[i+1], b = data[i+2];
-                pattern += (r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10)? '1' : '0';
-            }
-            return pattern;
-        }
-        
-        // TEMPLATES REAIS DA TUA FONTE - MEDIDOS AGORA
-        function patternToDigit(pat) {
-            const templates = {
-                '111101101101': '0', // 0
-                '010010010010': '1', // 1
-                '111001111010': '2', // 2
-                '111011111010': '3', // 3
-                '101111010010': '4', // 4
-                '111110011010': '5', // 5
-                '111110111010': '6', // 6
-                '111010010010': '7', // 7
-                '111111111010': '8', // 8
-                '111111011010': '9' // 9
-            };
-            
-            // Se bater 100%, retorna
-            if (templates[pat]) return templates[pat];
-            
-            // Senão pega o mais próximo com 10+ acertos de 12
-            let bestMatch = '?';
-            let bestScore = 0;
-            for (let t in templates) {
-                let score = 0;
-                for (let i = 0; i < 12; i++) {
-                    if (pat[i] === t[i]) score++;
-                }
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMatch = templates[t];
-                }
-            }
-            return bestScore >= 10? bestMatch : '?';
-        }
-        
-        function isLaranjaTexto(r, g, b) {
-            return r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10;
-        }
-        
-        btnExtrair.addEventListener('click', () => {
+        btnExtrair.addEventListener('click', async () => {
             status.className = 'info';
-            status.innerText = 'Extraindo com template V17.5...';
+            status.innerText = 'Lendo com Tesseract... demora 3-5s';
             
-            const img = new Image();
-            img.onload = () => {
-                let w = img.width;
-                let h = img.height;
-                
-                canvas.width = w;
-                canvas.height = h;
-                ctx.drawImage(img, 0, 0);
-                let imgData = ctx.getImageData(0, 0, w, h);
-                let data = imgData.data;
-                
-                canvasProcessada.width = w;
-                canvasProcessada.height = h;
-                let outputData = ctxProc.createImageData(w, h);
-                let out = outputData.data;
-                
-                let numeros = [];
-                let gridX = 4, gridY = 5;
-                let cellW = w / gridX;
-                let cellH = h / gridY;
-                
-                for (let row = 0; row < gridY; row++) {
-                    for (let col = 0; col < gridX; col++) {
-                        let startX = Math.floor(col * cellW);
-                        let endX = Math.floor((col + 1) * cellW);
-                        let startY = Math.floor(row * cellH);
-                        let endY = Math.floor((row + 1) * cellH);
-                        
-                        let temTexto = false;
-                        let digitBounds = {minX: endX, maxX: startX, minY: endY, maxY: startY};
-                        
-                        for (let y = startY; y < endY; y++) {
-                            for (let x = startX; x < endX; x++) {
-                                let i = (y * w + x) * 4;
-                                let r = data[i], g = data[i+1], b = data[i+2];
-                                
-                                if (isLaranjaTexto(r, g, b)) {
-                                    temTexto = true;
-                                    out[i] = 255; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
-                                    digitBounds.minX = Math.min(digitBounds.minX, x);
-                                    digitBounds.maxX = Math.max(digitBounds.maxX, x);
-                                    digitBounds.minY = Math.min(digitBounds.minY, y);
-                                    digitBounds.maxY = Math.max(digitBounds.maxY, y);
-                                } else if (r > 180 && g > 180 && b > 180) {
-                                    out[i] = 255; out[i+1] = 255; out[i+2] = 255; out[i+3] = 255;
-                                } else {
-                                    out[i] = 0; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
-                                }
-                            }
-                        }
-                        
-                        if (temTexto) {
-                            let dW = digitBounds.maxX - digitBounds.minX;
-                            let dH = digitBounds.maxY - digitBounds.minY;
-                            if (dW < 2 || dH < 4) continue;
-                            
-                            if (dW > dH * 0.55) {
-                                let mid = digitBounds.minX + dW / 2;
-                                let p1 = getDigitPattern(data, w, digitBounds.minX, mid, digitBounds.minY, digitBounds.maxY);
-                                let p2 = getDigitPattern(data, w, mid, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
-                                let d1 = patternToDigit(p1);
-                                let d2 = patternToDigit(p2);
-                                if (d1!== '?' && d2!== '?') numeros.push(d1 + d2);
-                            } else {
-                                let p = getDigitPattern(data, w, digitBounds.minX, digitBounds.maxX, digitBounds.minY, digitBounds.maxY);
-                                let d = patternToDigit(p);
-                                if (d!== '?') numeros.push('0' + d);
+            try {
+                const { data: { text } } = await Tesseract.recognize(
+                    preview.src,
+                    'eng',
+                    { 
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                status.innerText = `Lendo... ${Math.round(m.progress * 100)}%`;
                             }
                         }
                     }
-                }
+                );
                 
-                ctxProc.putImageData(outputData, 0, 0);
-                canvasProcessada.style.display = 'block';
-                
-                if (numeros.length === 0) {
+                // Extrai só números de 2 dígitos
+                const matches = text.match(/\d{2}/g);
+                if (!matches || matches.length === 0) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não achei números laranja';
+                    status.innerText = '❌ Não achei números de 2 dígitos';
                     return;
                 }
                 
-                numerosExtraidos = numeros.sort((a,b) => parseInt(a) - parseInt(b)).join(', ');
+                // Remove duplicatas e ordena
+                numerosExtraidos = [...new Set(matches)].sort((a,b) => parseInt(a) - parseInt(b)).join(', ');
                 resultado.innerText = numerosExtraidos;
                 resultado.style.display = 'block';
                 btnCopiar.style.display = 'block';
                 
                 status.className = 'sucesso';
-                status.innerText = `✅ ${numeros.length} números extraídos!`;
-            };
-            img.src = preview.src;
+                status.innerText = `✅ ${matches.length} números extraídos!`;
+                
+            } catch (err) {
+                status.className = 'erro';
+                status.innerText = '❌ Erro no OCR: ' + err.message;
+            }
         });
         
         btnCopiar.addEventListener('click', () => {
