@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator V18 - Tesseract</title>
+    <title>Extrator V18.1 - FINAL</title>
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -35,6 +35,7 @@
             border-radius: 8px;
             border: 2px solid #ff0000;
         }
+        #canvas { display: none; }
         
         button {
             width: 100%;
@@ -88,10 +89,10 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V18 - TESSERACT</h1>
+    <h1>🔴 Extrator V18.1 - FINAL</h1>
     
     <div class="info">
-        V18 - Chega de gambiarra. Usa OCR de verdade. Demora 3s mas acerta 100%.
+        V18.1 - Converte laranja pra preto antes do OCR. Agora lê.
     </div>
     
     <div id="upload-area">
@@ -102,6 +103,7 @@
     
     <input type="file" id="file-input" accept="image/*">
     <img id="preview">
+    <canvas id="canvas"></canvas>
     
     <button id="btnExtrair">🔍 Extrair Números</button>
     
@@ -114,6 +116,8 @@
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const preview = document.getElementById('preview');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
         const btnExtrair = document.getElementById('btnExtrair');
         const status = document.getElementById('status');
         const resultado = document.getElementById('resultado');
@@ -139,44 +143,75 @@
             reader.readAsDataURL(file);
         });
         
+        // PRÉ-PROCESSA: LARANJA VIRA PRETO, RESTO VIRA BRANCO
+        function preprocessImage(img) {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let data = imgData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                let r = data[i], g = data[i+1], b = data[i+2];
+                
+                // Se for laranja = vira PRETO
+                if (r > 90 && g > 20 && g < 240 && b < 190 && (r - b) > 10) {
+                    data[i] = 0; data[i+1] = 0; data[i+2] = 0; // preto
+                } else {
+                    data[i] = 255; data[i+1] = 255; data[i+2] = 255; // branco
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+            return canvas;
+        }
+        
         btnExtrair.addEventListener('click', async () => {
             status.className = 'info';
-            status.innerText = 'Lendo com Tesseract... demora 3-5s';
+            status.innerText = 'Convertendo laranja pra preto...';
             
-            try {
-                const { data: { text } } = await Tesseract.recognize(
-                    preview.src,
-                    'eng',
-                    { 
-                        logger: m => {
-                            if (m.status === 'recognizing text') {
-                                status.innerText = `Lendo... ${Math.round(m.progress * 100)}%`;
-                            }
+            const img = new Image();
+            img.onload = async () => {
+                try {
+                    const canvasPreto = preprocessImage(img);
+                    
+                    status.innerText = 'Lendo com OCR... 0%';
+                    
+                    const { data: { text } } = await Tesseract.recognize(
+                        canvasPreto,
+                        'eng',
+                        { 
+                            logger: m => {
+                                if (m.status === 'recognizing text') {
+                                    status.innerText = `Lendo... ${Math.round(m.progress * 100)}%`;
+                                }
+                            },
+                            tessedit_char_whitelist: '0123456789', // Só números
                         }
+                    );
+                    
+                    // Pega só pares de dígitos
+                    const matches = text.match(/\d{2}/g);
+                    if (!matches || matches.length === 0) {
+                        status.className = 'erro';
+                        status.innerText = '❌ Não achei números. Tenta recortar melhor.';
+                        return;
                     }
-                );
-                
-                // Extrai só números de 2 dígitos
-                const matches = text.match(/\d{2}/g);
-                if (!matches || matches.length === 0) {
+                    
+                    numerosExtraidos = [...new Set(matches)].sort((a,b) => parseInt(a) - parseInt(b)).join(', ');
+                    resultado.innerText = numerosExtraidos;
+                    resultado.style.display = 'block';
+                    btnCopiar.style.display = 'block';
+                    
+                    status.className = 'sucesso';
+                    status.innerText = `✅ ${matches.length} números extraídos!`;
+                    
+                } catch (err) {
                     status.className = 'erro';
-                    status.innerText = '❌ Não achei números de 2 dígitos';
-                    return;
+                    status.innerText = '❌ Erro: ' + err.message;
                 }
-                
-                // Remove duplicatas e ordena
-                numerosExtraidos = [...new Set(matches)].sort((a,b) => parseInt(a) - parseInt(b)).join(', ');
-                resultado.innerText = numerosExtraidos;
-                resultado.style.display = 'block';
-                btnCopiar.style.display = 'block';
-                
-                status.className = 'sucesso';
-                status.innerText = `✅ ${matches.length} números extraídos!`;
-                
-            } catch (err) {
-                status.className = 'erro';
-                status.innerText = '❌ Erro no OCR: ' + err.message;
-            }
+            };
+            img.src = preview.src;
         });
         
         btnCopiar.addEventListener('click', () => {
