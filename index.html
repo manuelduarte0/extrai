@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extrator V18.3 - FINAL</title>
+    <title>Extrator V18.4 - FINAL MESMO</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -74,7 +74,7 @@
     </style>
 </head>
 <body>
-    <h1>🔴 Extrator V18.3 - FINAL</h1>
+    <h1>🔴 Extrator V18.4 - AGORA VAI</h1>
     
     <div id="upload-area">
         <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
@@ -150,7 +150,10 @@
                 '01110100011000101110100011000101110': '8',
                 '01110100011000101111000010000101110': '9'
             };
-            if (templates) return templates;
+            
+            // CORRIGIDO: ERA if(templates) return templates; - BUG MORTAL
+            if (templates[prof]) return templates[prof];
+            
             let bestMatch = '?';
             let bestScore = 0;
             for (let t in templates) {
